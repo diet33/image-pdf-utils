@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="description" content="설치 없이 브라우저에서 PDF 변환, 이미지 축소·확대, 세로 합치기, 문서 스캔 보정을 할 수 있는 올인원 유틸리티">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="이미지유틸">
+  <meta name="format-detection" content="telephone=no">
+  <title>올인원 이미지/PDF 유틸리티</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+</head>
+<body>
+  <header class="header">
+    <h1>올인원 이미지/PDF 유틸리티</h1>
+    <p class="subtitle">설치 없이 브라우저에서 바로 사용하는 이미지·PDF 변환 도구</p>
+  </header>
+
+  <div class="ios-tip hidden" id="ios-tip">
+    <strong>iPhone 사용 팁</strong>
+    Safari에서 이용하세요. 결과 저장은 <em>저장/공유</em> 버튼을 누르거나, 이미지를 길게 눌러 「사진 저장」을 선택하세요. ZIP은 개별 저장이 더 안정적입니다.
+  </div>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab-btn active" data-tab="pdf-jpg" role="tab" aria-selected="true">PDF → JPG</button>
+    <button class="tab-btn" data-tab="resize" role="tab">이미지 줄이기</button>
+    <button class="tab-btn" data-tab="upscale" role="tab">이미지 2배 확대</button>
+    <button class="tab-btn" data-tab="merge" role="tab">이미지 세로 합치기</button>
+    <button class="tab-btn" data-tab="scan" role="tab">문서 스캔 보정</button>
+  </nav>
+
+  <main class="container">
+    <!-- PDF → JPG -->
+    <section id="pdf-jpg" class="tab-panel active" role="tabpanel">
+      <h2>PDF → JPG 변환</h2>
+      <p class="desc">PDF 파일의 각 페이지를 JPG 이미지로 변환합니다.</p>
+
+      <div class="drop-zone" data-drop="pdf-jpg">
+        <input type="file" id="pdf-jpg-input" accept=".pdf,application/pdf" hidden>
+        <div class="drop-icon">📄</div>
+        <p class="upload-text-desktop">PDF 파일을 드래그하거나 <button type="button" class="link-btn" data-trigger="pdf-jpg-input">클릭하여 선택</button></p>
+        <p class="upload-text-mobile">탭하여 PDF 파일 선택</p>
+        <p class="hint">최대 권장 크기: <span class="limit-pdf">50</span>MB · iPhone은 작은 파일 권장</p>
+      </div>
+      <div class="file-info" id="pdf-jpg-file-info"></div>
+
+      <div class="options">
+        <label>JPG 품질
+          <select id="pdf-jpg-quality">
+            <option value="0.92" selected>높음 (92%)</option>
+            <option value="0.85">보통 (85%)</option>
+            <option value="0.75">낮음 (75%)</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="btn btn-primary" id="pdf-jpg-run" disabled>변환 실행</button>
+        <button type="button" class="btn btn-secondary" id="pdf-jpg-reset">전체 초기화</button>
+      </div>
+
+      <div class="status" id="pdf-jpg-status"></div>
+      <div class="progress-wrap hidden" id="pdf-jpg-progress-wrap">
+        <div class="progress-bar"><div class="progress-bar-fill" id="pdf-jpg-progress"></div></div>
+      </div>
+      <div class="loading hidden" id="pdf-jpg-loading"><div class="spinner"></div><span>변환 중...</span></div>
+      <div class="results" id="pdf-jpg-results"></div>
+      <div class="batch-download hidden" id="pdf-jpg-batch">
+        <button type="button" class="btn btn-success" id="pdf-jpg-zip">전체 ZIP 다운로드</button>
+      </div>
+    </section>
+
+    <!-- 이미지 줄이기 -->
+    <section id="resize" class="tab-panel" role="tabpanel">
+      <h2>이미지 사이즈 줄이기</h2>
+      <p class="desc">JPG, PNG, WEBP 이미지의 크기를 비율에 맞게 줄입니다.</p>
+
+      <div class="drop-zone" data-drop="resize">
+        <input type="file" id="resize-input" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple hidden>
+        <div class="drop-icon">🖼️</div>
+        <p class="upload-text-desktop">이미지를 드래그하거나 <button type="button" class="link-btn" data-trigger="resize-input">클릭하여 선택</button></p>
+        <p class="upload-text-mobile">탭하여 이미지 선택 (여러 장 가능)</p>
+        <p class="hint">최대 권장: 각 <span class="limit-image">30</span>MB</p>
+      </div>
+      <div class="file-info" id="resize-file-info"></div>
+
+      <div class="options">
+        <span class="option-label">축소 비율</span>
+        <div class="radio-group">
+          <label><input type="radio" name="resize-scale" value="0.5" checked> 50%</label>
+          <label><input type="radio" name="resize-scale" value="0.2"> 20%</label>
+          <label><input type="radio" name="resize-scale" value="0.1"> 10%</label>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="btn btn-primary" id="resize-run" disabled>변환 실행</button>
+        <button type="button" class="btn btn-secondary" id="resize-reset">전체 초기화</button>
+      </div>
+
+      <div class="status" id="resize-status"></div>
+      <div class="loading hidden" id="resize-loading"><div class="spinner"></div><span>처리 중...</span></div>
+      <div class="results" id="resize-results"></div>
+      <div class="batch-download hidden" id="resize-batch">
+        <button type="button" class="btn btn-success" id="resize-zip">전체 ZIP 다운로드</button>
+      </div>
+    </section>
+
+    <!-- 이미지 2배 확대 -->
+    <section id="upscale" class="tab-panel" role="tabpanel">
+      <h2>이미지 2배 확대</h2>
+      <p class="desc">고품질 리사이즈(pica)로 이미지를 2배 확대합니다. AI 업스케일은 지원하지 않습니다.</p>
+
+      <div class="drop-zone" data-drop="upscale">
+        <input type="file" id="upscale-input" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden>
+        <div class="drop-icon">🔍</div>
+        <p class="upload-text-desktop">이미지를 드래그하거나 <button type="button" class="link-btn" data-trigger="upscale-input">클릭하여 선택</button></p>
+        <p class="upload-text-mobile">탭하여 이미지 선택</p>
+        <p class="hint">너무 큰 이미지는 자동으로 축소 후 처리됩니다</p>
+      </div>
+      <div class="file-info" id="upscale-file-info"></div>
+
+      <div class="options">
+        <label>출력 형식
+          <select id="upscale-format">
+            <option value="image/png">PNG</option>
+            <option value="image/jpeg" selected>JPG</option>
+            <option value="image/webp">WEBP</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="btn btn-primary" id="upscale-run" disabled>2배 확대 실행</button>
+        <button type="button" class="btn btn-secondary" id="upscale-reset">전체 초기화</button>
+      </div>
+
+      <div class="status" id="upscale-status"></div>
+      <div class="loading hidden" id="upscale-loading"><div class="spinner"></div><span>확대 중...</span></div>
+      <div class="results" id="upscale-results"></div>
+    </section>
+
+    <!-- 이미지 세로 합치기 -->
+    <section id="merge" class="tab-panel" role="tabpanel">
+      <h2>이미지 세로 합치기</h2>
+      <p class="desc">여러 이미지를 업로드 순서대로 위에서 아래로 이어붙입니다.</p>
+
+      <div class="drop-zone" data-drop="merge">
+        <input type="file" id="merge-input" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple hidden>
+        <div class="drop-icon">📋</div>
+        <p class="upload-text-desktop">이미지를 드래그하거나 <button type="button" class="link-btn" data-trigger="merge-input">클릭하여 선택</button></p>
+        <p class="upload-text-mobile">탭하여 이미지 선택 (2장 이상)</p>
+        <p class="hint">2장 이상 · 순서대로 합쳐집니다</p>
+      </div>
+      <div class="file-info" id="merge-file-info"></div>
+
+      <div class="options">
+        <span class="option-label">기준 폭</span>
+        <div class="radio-group">
+          <label><input type="radio" name="merge-width" value="first" checked> 첫 번째 이미지 기준</label>
+          <label><input type="radio" name="merge-width" value="max"> 가장 넓은 이미지 기준</label>
+          <label><input type="radio" name="merge-width" value="custom"> 직접 입력</label>
+        </div>
+        <label class="custom-width hidden" id="merge-custom-wrap">폭 (px)
+          <input type="number" id="merge-custom-width" min="100" max="8000" value="800" placeholder="800">
+        </label>
+        <label>출력 형식
+          <select id="merge-format">
+            <option value="image/jpeg" selected>JPG</option>
+            <option value="image/png">PNG</option>
+          </select>
+        </label>
+        <label>JPG 품질
+          <select id="merge-quality">
+            <option value="0.92" selected>높음 (92%)</option>
+            <option value="0.85">보통 (85%)</option>
+            <option value="0.75">낮음 (75%)</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="btn btn-primary" id="merge-run" disabled>합치기 실행</button>
+        <button type="button" class="btn btn-secondary" id="merge-reset">전체 초기화</button>
+      </div>
+
+      <div class="status" id="merge-status"></div>
+      <div class="loading hidden" id="merge-loading"><div class="spinner"></div><span>합치는 중...</span></div>
+      <div class="results" id="merge-results"></div>
+    </section>
+
+    <!-- 문서 스캔 보정 -->
+    <section id="scan" class="tab-panel" role="tabpanel">
+      <h2>문서 스캔 보정</h2>
+      <p class="desc">휴대폰으로 찍은 문서 사진을 스캔본처럼 보정합니다. (OpenCV.js)</p>
+
+      <div class="mobile-actions" id="scan-mobile-actions">
+        <button type="button" class="btn btn-primary btn-block" id="scan-camera-btn">📷 카메라로 촬영</button>
+        <button type="button" class="btn btn-secondary btn-block" id="scan-album-btn">🖼️ 앨범에서 선택</button>
+      </div>
+      <input type="file" id="scan-camera-input" accept="image/*" capture="environment" hidden>
+      <div class="drop-zone" data-drop="scan">
+        <input type="file" id="scan-input" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden>
+        <div class="drop-icon">📷</div>
+        <p class="upload-text-desktop">문서 사진을 드래그하거나 <button type="button" class="link-btn" data-trigger="scan-input">클릭하여 선택</button></p>
+        <p class="upload-text-mobile">탭하여 문서 사진 선택</p>
+        <p class="hint">자동 문서 영역 감지 · 기울기 보정</p>
+      </div>
+      <div class="file-info" id="scan-file-info"></div>
+
+      <div class="options">
+        <span class="option-label">스캔 모드</span>
+        <div class="radio-group">
+          <label><input type="radio" name="scan-mode" value="color" checked> 컬러 스캔</label>
+          <label><input type="radio" name="scan-mode" value="bw"> 흑백 스캔</label>
+        </div>
+        <label>JPG 압축 품질 (용량 줄이기)
+          <select id="scan-quality">
+            <option value="0.92" selected>높음 (92%)</option>
+            <option value="0.85">보통 (85%)</option>
+            <option value="0.70">낮음 (70%)</option>
+            <option value="0.55">최소 용량 (55%)</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="opencv-status" id="opencv-status">OpenCV.js 로딩 중...</div>
+
+      <div class="actions">
+        <button type="button" class="btn btn-primary" id="scan-run" disabled>보정 실행</button>
+        <button type="button" class="btn btn-secondary" id="scan-reset">전체 초기화</button>
+      </div>
+
+      <div class="status" id="scan-status"></div>
+      <div class="loading hidden" id="scan-loading"><div class="spinner"></div><span>문서 보정 중...</span></div>
+      <div class="results" id="scan-results"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>모든 처리는 브라우저에서 로컬로 수행됩니다. 파일이 서버로 전송되지 않습니다.</p>
+  </footer>
+
+  <!-- CDN Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pica@9.0.1/dist/pica.min.js"></script>
+  <script>
+    var Module = {
+      onRuntimeInitialized: function () {
+        if (typeof onOpenCvReady === 'function') onOpenCvReady();
+      }
+    };
+  </script>
+  <script async src="https://docs.opencv.org/4.7.0/opencv.js" type="text/javascript"></script>
+  <script src="app.js"></script>
+</body>
+</html>

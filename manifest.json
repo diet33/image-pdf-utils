@@ -1,0 +1,18 @@
+{
+  "name": "올인원 이미지/PDF 유틸리티",
+  "short_name": "이미지유틸",
+  "description": "브라우저에서 PDF 변환, 이미지 편집, 문서 스캔",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f1f5f9",
+  "theme_color": "#2563eb",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
