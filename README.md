@@ -18,7 +18,25 @@ PDF 변환, 이미지 축소·확대, 세로 합치기, 문서 스캔 보정 기
 | **이미지 세로 합치기** | 여러 이미지를 위→아래로 이어붙이기 |
 | **문서 스캔 보정** | OpenCV.js로 문서 영역 감지, 기울기 보정, 선명도·대비 향상 |
 
+## 테스트 실행
+
+```bash
+# 로컬 서버 (8081) 실행 후
+python tests/test_runner.py
+```
+
+Playwright로 5개 기능(이미지 줄이기, 2배 확대, 세로 합치기, PDF→JPG, 문서 스캔)을 자동 검증합니다.
+
 ## GitHub Pages 배포 방법
+
+### 원클릭 배포 (Windows)
+
+```powershell
+Set-Location "D:\GROK_BUILD"
+.\deploy.ps1
+```
+
+최초 실행 시 브라우저에서 GitHub 로그인이 필요합니다.
 
 ### 1. 저장소 생성 및 업로드
 
