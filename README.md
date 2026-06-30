@@ -31,9 +31,16 @@ Playwright로 5개 기능(이미지 줄이기, 2배 확대, 세로 합치기, PD
 
 ### 원클릭 배포 (Windows)
 
+```cmd
+cd D:\GROK_BUILD
+deploy.bat
+```
+
+또는 PowerShell 실행 정책 오류 시:
+
 ```powershell
 Set-Location "D:\GROK_BUILD"
-.\deploy.ps1
+powershell -ExecutionPolicy Bypass -File .\deploy.ps1
 ```
 
 최초 실행 시 브라우저에서 GitHub 로그인이 필요합니다.
