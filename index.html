@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="description" content="설치 없이 브라우저에서 PDF 변환, 이미지 축소·확대, 세로 합치기, 문서 스캔 보정을 할 수 있는 올인원 유틸리티">
+  <meta name="description" content="설치 없이 브라우저에서 사진 보기, PDF 변환, 이미지 편집, 문서 스캔을 할 수 있는 올인원 유틸리티">
   <meta name="theme-color" content="#2563eb">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -27,7 +27,8 @@
   </div>
 
   <nav class="tabs" role="tablist">
-    <button class="tab-btn active" data-tab="pdf-jpg" role="tab" aria-selected="true">PDF → JPG</button>
+    <button class="tab-btn active" data-tab="gallery" role="tab" aria-selected="true">사진 보기</button>
+    <button class="tab-btn" data-tab="pdf-jpg" role="tab">PDF → JPG</button>
     <button class="tab-btn" data-tab="resize" role="tab">이미지 줄이기</button>
     <button class="tab-btn" data-tab="upscale" role="tab">이미지 2배 확대</button>
     <button class="tab-btn" data-tab="merge" role="tab">이미지 세로 합치기</button>
@@ -35,8 +36,49 @@
   </nav>
 
   <main class="container">
+    <!-- 사진 보기 -->
+    <section id="gallery" class="tab-panel active" role="tabpanel">
+      <h2>사진 보기</h2>
+      <p class="desc">iPhone 파일 앱의 사진을 불러와 썸네일 그리드·슬라이드로 편하게 넘겨 볼 수 있습니다.</p>
+
+      <div class="mobile-actions gallery-mobile-actions">
+        <button type="button" class="btn btn-primary btn-block" id="gallery-files-btn">📁 파일 앱에서 사진 선택</button>
+        <button type="button" class="btn btn-secondary btn-block" id="gallery-add-btn" disabled>➕ 사진 더 추가</button>
+      </div>
+
+      <div class="drop-zone" data-drop="gallery">
+        <input type="file" id="gallery-input" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif" multiple hidden>
+        <input type="file" id="gallery-add-input" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif" multiple hidden>
+        <div class="drop-icon">🖼️</div>
+        <p class="upload-text-desktop">사진을 드래그하거나 <button type="button" class="link-btn" data-trigger="gallery-input">클릭하여 선택</button></p>
+        <p class="upload-text-mobile">탭하여 파일 앱에서 사진 선택 (여러 장)</p>
+        <p class="hint">iPhone: 파일 앱 → 사진 폴더 → 오른쪽 상단 「선택」→ 여러 장 선택</p>
+      </div>
+
+      <div class="gallery-toolbar hidden" id="gallery-toolbar">
+        <div class="gallery-count" id="gallery-count">0장</div>
+        <div class="gallery-toolbar-actions">
+          <label class="gallery-sort-label">정렬
+            <select id="gallery-sort">
+              <option value="name">이름순</option>
+              <option value="date" selected>날짜순 (최신)</option>
+            </select>
+          </label>
+          <button type="button" class="btn btn-primary btn-compact" id="gallery-slideshow-btn">슬라이드 보기</button>
+        </div>
+      </div>
+
+      <div class="status" id="gallery-status"></div>
+      <div class="loading hidden" id="gallery-loading"><div class="spinner"></div><span>사진 불러오는 중...</span></div>
+      <div class="gallery-grid" id="gallery-grid"></div>
+
+      <div class="actions">
+        <button type="button" class="btn btn-secondary" id="gallery-reset">전체 초기화</button>
+      </div>
+    </section>
+
     <!-- PDF → JPG -->
-    <section id="pdf-jpg" class="tab-panel active" role="tabpanel">
+    <section id="pdf-jpg" class="tab-panel" role="tabpanel">
       <h2>PDF → JPG 변환</h2>
       <p class="desc">PDF 파일의 각 페이지를 JPG 이미지로 변환합니다.</p>
 
@@ -241,6 +283,27 @@
       <div class="results" id="scan-results"></div>
     </section>
   </main>
+
+  <!-- 전체화면 사진 뷰어 -->
+  <div id="gallery-viewer" class="gallery-viewer hidden" role="dialog" aria-modal="true" aria-label="사진 슬라이드 보기">
+    <div class="viewer-top">
+      <button type="button" class="viewer-btn" id="gallery-viewer-close" aria-label="닫기">✕ 닫기</button>
+      <span class="viewer-counter" id="gallery-viewer-counter">1 / 1</span>
+      <button type="button" class="viewer-btn viewer-btn-save" id="gallery-viewer-save">저장/공유</button>
+    </div>
+    <div class="viewer-stage" id="gallery-viewer-stage">
+      <button type="button" class="viewer-nav viewer-nav-prev" id="gallery-viewer-prev" aria-label="이전">‹</button>
+      <div class="viewer-img-wrap" id="gallery-viewer-img-wrap">
+        <img id="gallery-viewer-img" alt="" draggable="false">
+      </div>
+      <button type="button" class="viewer-nav viewer-nav-next" id="gallery-viewer-next" aria-label="다음">›</button>
+    </div>
+    <div class="viewer-meta">
+      <div class="viewer-filename" id="gallery-viewer-name"></div>
+      <div class="viewer-hint">좌우 스와이프 또는 버튼으로 넘기기 · 핀치로 확대</div>
+    </div>
+    <div class="viewer-filmstrip" id="gallery-viewer-filmstrip"></div>
+  </div>
 
   <footer class="footer">
     <p>모든 처리는 브라우저에서 로컬로 수행됩니다. 파일이 서버로 전송되지 않습니다.</p>

@@ -9,6 +9,7 @@ let WARN_MERGE_PIXELS = 50_000_000;
 let MAX_UPSCALE_INPUT_SIDE = 4096;
 let PDF_RENDER_SCALE = 2.0;
 let SCAN_MAX_SIDE = 3000;
+let MAX_GALLERY_PHOTOS = 500;
 
 function isIOS() {
   return (
@@ -30,6 +31,7 @@ function applyDeviceLimits() {
     WARN_MERGE_PIXELS = 20_000_000;
     PDF_RENDER_SCALE = 1.5;
     SCAN_MAX_SIDE = 2000;
+    MAX_GALLERY_PHOTOS = 200;
     document.body.classList.add('is-ios');
   }
   if (isMobile()) {
@@ -79,6 +81,7 @@ const state = {
   upscale: { files: [], results: [] },
   merge: { files: [], results: [] },
   scan: { files: [], results: [] },
+  gallery: { items: [], currentIndex: 0 },
 };
 
 // ─── Utility helpers ─────────────────────────────────────────
@@ -372,6 +375,18 @@ function renderResults(tabId, items) {
     );
   });
   state[tabId].results = items;
+}
+
+function validateGalleryFile(file) {
+  const valid = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+  if (!valid.includes(file.type) && !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)) {
+    throw new Error('지원하지 않는 이미지 형식입니다: ' + file.name);
+  }
+  if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
+    throw new Error(
+      file.name + ' 파일이 너무 큽니다 (' + formatSize(file.size) + '). ' + MAX_IMAGE_SIZE_MB + 'MB 이하를 권장합니다.'
+    );
+  }
 }
 
 function validateImageFile(file) {
@@ -1220,9 +1235,330 @@ function initScan() {
   }, 8000);
 }
 
+// ─── Feature 6: Photo gallery viewer ─────────────────────────
+function revokeGalleryItems(items) {
+  items.forEach(function (item) {
+    if (item.url) URL.revokeObjectURL(item.url);
+  });
+}
+
+function sortGalleryItems(items, mode) {
+  const sorted = items.slice();
+  if (mode === 'name') {
+    sorted.sort(function (a, b) {
+      return a.name.localeCompare(b.name, 'ko');
+    });
+  } else {
+    sorted.sort(function (a, b) {
+      return b.modified - a.modified;
+    });
+  }
+  return sorted;
+}
+
+function initGallery() {
+  const grid = document.getElementById('gallery-grid');
+  const toolbar = document.getElementById('gallery-toolbar');
+  const countEl = document.getElementById('gallery-count');
+  const viewer = document.getElementById('gallery-viewer');
+  const viewerImg = document.getElementById('gallery-viewer-img');
+  const viewerCounter = document.getElementById('gallery-viewer-counter');
+  const viewerName = document.getElementById('gallery-viewer-name');
+  const filmstrip = document.getElementById('gallery-viewer-filmstrip');
+  const addBtn = document.getElementById('gallery-add-btn');
+  let touchStartX = 0;
+  let touchStartY = 0;
+
+  function getSortMode() {
+    return document.getElementById('gallery-sort').value;
+  }
+
+  function getSortedItems() {
+    return sortGalleryItems(state.gallery.items, getSortMode());
+  }
+
+  function updateToolbar() {
+    const n = state.gallery.items.length;
+    if (n > 0) {
+      toolbar.classList.remove('hidden');
+      countEl.textContent = n + '장';
+      addBtn.disabled = false;
+    } else {
+      toolbar.classList.add('hidden');
+      addBtn.disabled = true;
+    }
+  }
+
+  function renderGrid() {
+    grid.innerHTML = '';
+    const items = getSortedItems();
+    items.forEach(function (item, idx) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'gallery-thumb';
+      btn.setAttribute('aria-label', item.name);
+
+      const img = document.createElement('img');
+      img.src = item.url;
+      img.alt = item.name;
+      img.loading = 'lazy';
+
+      const badge = document.createElement('span');
+      badge.className = 'gallery-thumb-index';
+      badge.textContent = String(idx + 1);
+
+      btn.appendChild(img);
+      btn.appendChild(badge);
+      btn.addEventListener('click', function () {
+        openViewer(findItemIndex(item.id));
+      });
+      grid.appendChild(btn);
+    });
+    updateToolbar();
+  }
+
+  function findItemIndex(id) {
+    const items = getSortedItems();
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].id === id) return i;
+    }
+    return 0;
+  }
+
+  function getCurrentItem() {
+    const items = getSortedItems();
+    return items[state.gallery.currentIndex] || null;
+  }
+
+  function updateViewer() {
+    const items = getSortedItems();
+    const total = items.length;
+    if (total === 0) return;
+
+    if (state.gallery.currentIndex >= total) {
+      state.gallery.currentIndex = total - 1;
+    }
+    if (state.gallery.currentIndex < 0) state.gallery.currentIndex = 0;
+
+    const item = items[state.gallery.currentIndex];
+    viewerImg.src = item.url;
+    viewerImg.alt = item.name;
+    viewerCounter.textContent = state.gallery.currentIndex + 1 + ' / ' + total;
+    viewerName.textContent = item.name + ' · ' + formatSize(item.size);
+
+    filmstrip.innerHTML = '';
+    items.forEach(function (it, i) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'viewer-film-thumb' + (i === state.gallery.currentIndex ? ' active' : '');
+      const thumb = document.createElement('img');
+      thumb.src = it.url;
+      thumb.alt = '';
+      btn.appendChild(thumb);
+      btn.addEventListener('click', function () {
+        state.gallery.currentIndex = i;
+        updateViewer();
+      });
+      filmstrip.appendChild(btn);
+    });
+
+    const activeThumb = filmstrip.querySelector('.viewer-film-thumb.active');
+    if (activeThumb) {
+      activeThumb.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+    }
+
+    grid.querySelectorAll('.gallery-thumb').forEach(function (el, i) {
+      el.classList.toggle('active', i === state.gallery.currentIndex);
+    });
+  }
+
+  function openViewer(index) {
+    if (state.gallery.items.length === 0) return;
+    state.gallery.currentIndex = index;
+    viewer.classList.remove('hidden');
+    document.body.classList.add('viewer-open');
+    updateViewer();
+  }
+
+  function closeViewer() {
+    viewer.classList.add('hidden');
+    document.body.classList.remove('viewer-open');
+    viewerImg.src = '';
+  }
+
+  function viewerNext() {
+    const total = getSortedItems().length;
+    if (total === 0) return;
+    state.gallery.currentIndex = (state.gallery.currentIndex + 1) % total;
+    updateViewer();
+  }
+
+  function viewerPrev() {
+    const total = getSortedItems().length;
+    if (total === 0) return;
+    state.gallery.currentIndex = (state.gallery.currentIndex - 1 + total) % total;
+    updateViewer();
+  }
+
+  async function addGalleryFiles(files, append) {
+    if (!files.length) return;
+
+    setLoading('gallery', true);
+    let warnMsg = '';
+
+    try {
+      if (!append) {
+        revokeGalleryItems(state.gallery.items);
+        state.gallery.items = [];
+      }
+
+      const remaining = MAX_GALLERY_PHOTOS - state.gallery.items.length;
+      let toAdd = Array.from(files);
+
+      if (toAdd.length > remaining) {
+        toAdd = toAdd.slice(0, remaining);
+        warnMsg =
+          '한 번에 최대 ' +
+          MAX_GALLERY_PHOTOS +
+          '장까지 불러올 수 있습니다. ' +
+          remaining +
+          '장만 추가했습니다.';
+      }
+
+      for (let i = 0; i < toAdd.length; i++) {
+        await yieldToMain();
+        const file = toAdd[i];
+        try {
+          validateGalleryFile(file);
+        } catch (e) {
+          if (toAdd.length === 1) throw e;
+          continue;
+        }
+        state.gallery.items.push({
+          id: Date.now() + '-' + i + '-' + Math.random().toString(36).slice(2),
+          file: file,
+          url: URL.createObjectURL(file),
+          name: file.name,
+          size: file.size,
+          modified: file.lastModified || 0,
+        });
+      }
+
+      if (state.gallery.items.length === 0) {
+        throw new Error('불러올 수 있는 사진이 없습니다.');
+      }
+
+      renderGrid();
+      const msg =
+        state.gallery.items.length +
+        '장 불러옴. 썸네일을 탭하거나 「슬라이드 보기」로 넘겨 보세요.' +
+        (warnMsg ? ' ' + warnMsg : '');
+      setStatus('gallery', msg, warnMsg ? 'warning' : 'success');
+    } catch (err) {
+      setStatus('gallery', err.message, 'error');
+    } finally {
+      setLoading('gallery', false);
+    }
+  }
+
+  function clearGallery() {
+    revokeGalleryItems(state.gallery.items);
+    state.gallery.items = [];
+    state.gallery.currentIndex = 0;
+    grid.innerHTML = '';
+    closeViewer();
+    updateToolbar();
+    setStatus('gallery', '');
+  }
+
+  setupDropZone('gallery', 'gallery-input', function (files) {
+    addGalleryFiles(files, false);
+  });
+
+  document.getElementById('gallery-files-btn').addEventListener('click', function () {
+    document.getElementById('gallery-input').click();
+  });
+
+  document.getElementById('gallery-add-btn').addEventListener('click', function () {
+    document.getElementById('gallery-add-input').click();
+  });
+
+  document.getElementById('gallery-add-input').addEventListener('change', function () {
+    if (this.files.length) addGalleryFiles(Array.from(this.files), true);
+    this.value = '';
+  });
+
+  document.getElementById('gallery-sort').addEventListener('change', function () {
+    if (state.gallery.items.length) {
+      const current = getCurrentItem();
+      const currentId = current ? current.id : null;
+      renderGrid();
+      if (!viewer.classList.contains('hidden') && currentId !== null) {
+        state.gallery.currentIndex = findItemIndex(currentId);
+        updateViewer();
+      }
+    }
+  });
+
+  document.getElementById('gallery-slideshow-btn').addEventListener('click', function () {
+    if (state.gallery.items.length === 0) {
+      setStatus('gallery', '먼저 사진을 불러와 주세요.', 'warning');
+      return;
+    }
+    openViewer(0);
+  });
+
+  document.getElementById('gallery-reset').addEventListener('click', clearGallery);
+
+  document.getElementById('gallery-viewer-close').addEventListener('click', closeViewer);
+  document.getElementById('gallery-viewer-prev').addEventListener('click', viewerPrev);
+  document.getElementById('gallery-viewer-next').addEventListener('click', viewerNext);
+
+  document.getElementById('gallery-viewer-save').addEventListener('click', async function () {
+    const item = getCurrentItem();
+    if (!item) return;
+    try {
+      await downloadBlob(item.file, item.name);
+      setStatus('gallery', '저장/공유를 시도했습니다.', 'info');
+    } catch (err) {
+      setStatus('gallery', err.message, 'error');
+    }
+  });
+
+  const stage = document.getElementById('gallery-viewer-stage');
+  stage.addEventListener(
+    'touchstart',
+    function (e) {
+      touchStartX = e.changedTouches[0].clientX;
+      touchStartY = e.changedTouches[0].clientY;
+    },
+    { passive: true }
+  );
+  stage.addEventListener(
+    'touchend',
+    function (e) {
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      const dy = e.changedTouches[0].clientY - touchStartY;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        if (dx < 0) viewerNext();
+        else viewerPrev();
+      }
+    },
+    { passive: true }
+  );
+
+  document.addEventListener('keydown', function (e) {
+    if (viewer.classList.contains('hidden')) return;
+    if (e.key === 'Escape') closeViewer();
+    if (e.key === 'ArrowRight') viewerNext();
+    if (e.key === 'ArrowLeft') viewerPrev();
+  });
+}
+
 // ─── Init ────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function () {
   applyDeviceLimits();
+  initGallery();
   initPdfJpg();
   initResize();
   initUpscale();
