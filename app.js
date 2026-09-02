@@ -833,6 +833,10 @@ function initGoogleDriveModal(onAddFiles) {
 
   openBtn.addEventListener('click', function () {
     modal.classList.remove('hidden');
+    const savedClientId = localStorage.getItem('gdrive_client_id');
+    const savedApiKey = localStorage.getItem('gdrive_api_key');
+    if (savedClientId) document.getElementById('gdrive-client-id').value = savedClientId;
+    if (savedApiKey) document.getElementById('gdrive-api-key').value = savedApiKey;
   });
 
   closeBtn.addEventListener('click', function () {
@@ -944,6 +948,9 @@ function initGoogleDriveModal(onAddFiles) {
       alert('Google Client ID와 API Key를 모두 입력해야 내 드라이브 파일 탐색기를 열 수 있습니다.\n간단한 공유 사진은 위의 "공유 링크로 가져오기"를 이용하세요.');
       return;
     }
+
+    localStorage.setItem('gdrive_client_id', clientId);
+    localStorage.setItem('gdrive_api_key', apiKey);
 
     if (typeof google === 'undefined' || !google.accounts || !gapi) {
       alert('Google API 클라이언트 라이브러리가 아직 로드되지 않았습니다. 인터넷 연결을 확인해 주세요.');
