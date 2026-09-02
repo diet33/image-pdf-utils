@@ -892,6 +892,22 @@ const GDriveCache = {
     } catch (e) {
       return [];
     }
+  },
+
+  clearPhotos: async function () {
+    try {
+      const db = await GDriveCache.openDB();
+      const tx = db.transaction(GDriveCache.STORE_NAME, 'readwrite');
+      tx.objectStore(GDriveCache.STORE_NAME).clear();
+      localStorage.removeItem('gdrive_cache_folder_id');
+      localStorage.removeItem('gdrive_cache_folder_name');
+      localStorage.removeItem('gdrive_cache_count');
+      localStorage.removeItem('gdrive_cache_time');
+      return true;
+    } catch (e) {
+      console.warn('GDriveCache clear error:', e);
+      return false;
+    }
   }
 };
 
@@ -902,6 +918,7 @@ function initGDriveCacheBar(onAddFiles, onReFetch) {
   const cacheInfo = document.getElementById('gdrive-cache-info');
   const openBtn = document.getElementById('gdrive-cache-open-btn');
   const refreshBtn = document.getElementById('gdrive-cache-refresh-btn');
+  const clearBtn = document.getElementById('gdrive-cache-clear-btn');
 
   function renderBar() {
     if (!cacheBar || !cacheInfo) return;
@@ -947,6 +964,25 @@ function initGDriveCacheBar(onAddFiles, onReFetch) {
       } else {
         const cfgBtn = document.getElementById('gallery-gdrive-config-btn') || document.getElementById('gallery-gdrive-btn');
         if (cfgBtn) cfgBtn.click();
+      }
+    });
+  }
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', async function () {
+      const count = localStorage.getItem('gdrive_cache_count') || '0';
+      if (!confirm('저장된 구글 드라이브 사진 캐시(' + count + '장)를 완전히 삭제하시겠습니까?')) {
+        return;
+      }
+      setLoading('gallery', true);
+      try {
+        await GDriveCache.clearPhotos();
+        renderBar();
+        setStatus('gallery', '구글 드라이브 사진 캐시(' + count + '장)가 완전히 삭제되었습니다.', 'success');
+      } catch (e) {
+        setStatus('gallery', '캐시 삭제 실패: ' + e.message, 'error');
+      } finally {
+        setLoading('gallery', false);
       }
     });
   }

@@ -1,5 +1,5 @@
 // Service Worker for 올인원 이미지/PDF 유틸리티
-const CACHE_NAME = 'image-pdf-utils-v5';
+const CACHE_NAME = 'image-pdf-utils-v6';
 
 const ASSETS_TO_CACHE = [
   './',
