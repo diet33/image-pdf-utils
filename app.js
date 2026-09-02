@@ -524,10 +524,10 @@ function initGallery() {
     if (n > 0) {
       toolbar.classList.remove('hidden');
       countEl.textContent = n + '장';
-      addBtn.disabled = false;
+      if (addBtn) addBtn.disabled = false;
     } else {
       toolbar.classList.add('hidden');
-      addBtn.disabled = true;
+      if (addBtn) addBtn.disabled = true;
     }
   }
 
@@ -697,53 +697,56 @@ function initGallery() {
     document.getElementById('gallery-input').click();
   });
 
-  // 2) 내 컴퓨터 폴더 통째로 열기
+  // 2) 내 컴퓨터 폴더 통째로 열기 (선택적)
+  const folderBtn = document.getElementById('gallery-folder-btn');
   const folderInput = document.getElementById('gallery-folder-input');
-  document.getElementById('gallery-folder-btn').addEventListener('click', async function () {
-    // 모던 File System Access API 지원 시 시도
-    if (window.showDirectoryPicker && !isIOS()) {
-      try {
-        const dirHandle = await window.showDirectoryPicker();
-        setLoading('gallery', true);
-        const files = [];
-        for await (const entry of dirHandle.values()) {
-          if (entry.kind === 'file') {
-            const file = await entry.getFile();
-            if (file.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i.test(file.name)) {
-              files.push(file);
+  if (folderBtn && folderInput) {
+    folderBtn.addEventListener('click', async function () {
+      if (window.showDirectoryPicker && !isIOS()) {
+        try {
+          const dirHandle = await window.showDirectoryPicker();
+          setLoading('gallery', true);
+          const files = [];
+          for await (const entry of dirHandle.values()) {
+            if (entry.kind === 'file') {
+              const file = await entry.getFile();
+              if (file.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i.test(file.name)) {
+                files.push(file);
+              }
             }
           }
+          if (files.length) {
+            addGalleryFiles(files, false);
+          } else {
+            setStatus('gallery', '선택한 폴더에 이미지 파일이 없습니다.', 'warning');
+          }
+          return;
+        } catch (e) {
+          if (e.name === 'AbortError') return;
+        } finally {
+          setLoading('gallery', false);
         }
-        if (files.length) {
-          addGalleryFiles(files, false);
-        } else {
-          setStatus('gallery', '선택한 폴더에 이미지 파일이 없습니다.', 'warning');
-        }
-        return;
-      } catch (e) {
-        if (e.name === 'AbortError') return;
-      } finally {
-        setLoading('gallery', false);
       }
-    }
-    // 폴백: <input webkitdirectory>
-    folderInput.click();
-  });
+      folderInput.click();
+    });
 
-  folderInput.addEventListener('change', function () {
-    if (this.files.length) addGalleryFiles(Array.from(this.files), false);
-    this.value = '';
-  });
+    folderInput.addEventListener('change', function () {
+      if (this.files.length) addGalleryFiles(Array.from(this.files), false);
+      this.value = '';
+    });
+  }
 
-  // 3) 사진 더 추가
-  document.getElementById('gallery-add-btn').addEventListener('click', function () {
-    document.getElementById('gallery-add-input').click();
-  });
-
-  document.getElementById('gallery-add-input').addEventListener('change', function () {
-    if (this.files.length) addGalleryFiles(Array.from(this.files), true);
-    this.value = '';
-  });
+  // 3) 사진 더 추가 (선택적)
+  const addInput = document.getElementById('gallery-add-input');
+  if (addBtn && addInput) {
+    addBtn.addEventListener('click', function () {
+      addInput.click();
+    });
+    addInput.addEventListener('change', function () {
+      if (this.files.length) addGalleryFiles(Array.from(this.files), true);
+      this.value = '';
+    });
+  }
 
   // 4) 정렬 변경
   document.getElementById('gallery-sort').addEventListener('change', function () {
@@ -817,8 +820,138 @@ function initGallery() {
     if (e.key === 'ArrowLeft') viewerPrev();
   });
 
-  // 6) 구글 드라이브 모달 연동
+  // 6) 구글 드라이브 모달 및 IndexedDB 캐시 바 연동
   initGoogleDriveModal(addGalleryFiles);
+}
+
+// ─── IndexedDB Google Drive Photo Cache ───────────────────────
+const GDriveCache = {
+  DB_NAME: 'ImageUtilGDriveCacheDB',
+  STORE_NAME: 'drive_cached_photos',
+
+  openDB: function () {
+    return new Promise(function (resolve, reject) {
+      if (!window.indexedDB) return reject(new Error('IndexedDB 미지원'));
+      const req = indexedDB.open(GDriveCache.DB_NAME, 1);
+      req.onupgradeneeded = function (e) {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(GDriveCache.STORE_NAME)) {
+          db.createObjectStore(GDriveCache.STORE_NAME, { keyPath: 'id' });
+        }
+      };
+      req.onsuccess = function (e) { resolve(e.target.result); };
+      req.onerror = function (e) { reject(e.target.error); };
+    });
+  },
+
+  savePhotos: async function (files, folderId, folderName) {
+    try {
+      const db = await GDriveCache.openDB();
+      const tx = db.transaction(GDriveCache.STORE_NAME, 'readwrite');
+      const store = tx.objectStore(GDriveCache.STORE_NAME);
+      store.clear();
+
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        store.put({
+          id: i + '_' + f.name,
+          name: f.name,
+          type: f.type || 'image/jpeg',
+          blob: f,
+          folderId: folderId || '',
+          folderName: folderName || '',
+          savedAt: Date.now()
+        });
+      }
+
+      localStorage.setItem('gdrive_cache_folder_id', folderId || '');
+      localStorage.setItem('gdrive_cache_folder_name', folderName || '');
+      localStorage.setItem('gdrive_cache_count', files.length);
+      localStorage.setItem('gdrive_cache_time', Date.now());
+    } catch (e) {
+      console.warn('GDriveCache save error:', e);
+    }
+  },
+
+  loadPhotos: async function () {
+    try {
+      const db = await GDriveCache.openDB();
+      return new Promise(function (resolve, reject) {
+        const tx = db.transaction(GDriveCache.STORE_NAME, 'readonly');
+        const store = tx.objectStore(GDriveCache.STORE_NAME);
+        const req = store.getAll();
+        req.onsuccess = function () {
+          const records = req.result || [];
+          const files = records.map(function (r) {
+            return new File([r.blob], r.name, { type: r.type });
+          });
+          resolve(files);
+        };
+        req.onerror = function () { reject(req.error); };
+      });
+    } catch (e) {
+      return [];
+    }
+  }
+};
+
+let updateCacheBarUI = null;
+
+function initGDriveCacheBar(onAddFiles, onReFetch) {
+  const cacheBar = document.getElementById('gdrive-cache-bar');
+  const cacheInfo = document.getElementById('gdrive-cache-info');
+  const openBtn = document.getElementById('gdrive-cache-open-btn');
+  const refreshBtn = document.getElementById('gdrive-cache-refresh-btn');
+
+  function renderBar() {
+    if (!cacheBar || !cacheInfo) return;
+    const count = parseInt(localStorage.getItem('gdrive_cache_count') || '0', 10);
+    const folderName = localStorage.getItem('gdrive_cache_folder_name') || '';
+
+    if (count > 0) {
+      cacheBar.classList.remove('hidden');
+      cacheInfo.textContent = (folderName ? '「' + folderName + '」 ' : '') + count + '장';
+    } else {
+      cacheBar.classList.add('hidden');
+    }
+  }
+
+  renderBar();
+
+  if (openBtn) {
+    openBtn.addEventListener('click', async function () {
+      setLoading('gallery', true);
+      setStatus('gallery', '저장된 사진을 바로 불러오는 중...', 'info');
+      try {
+        const files = await GDriveCache.loadPhotos();
+        if (files && files.length) {
+          onAddFiles(files, false);
+          setStatus('gallery', files.length + '장의 사진을 캐시에서 즉시 불러왔습니다! (0초 로딩)', 'success');
+        } else {
+          setStatus('gallery', '저장된 캐시 사진이 없습니다.', 'warning');
+        }
+      } catch (err) {
+        setStatus('gallery', '캐시 로드 실패: ' + err.message, 'error');
+      } finally {
+        setLoading('gallery', false);
+      }
+    });
+  }
+
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', function () {
+      const folderId = localStorage.getItem('gdrive_cache_folder_id');
+      const folderName = localStorage.getItem('gdrive_cache_folder_name') || '드라이브';
+      if (folderId && onReFetch) {
+        onReFetch(folderId, folderName);
+      } else {
+        const cfgBtn = document.getElementById('gallery-gdrive-config-btn') || document.getElementById('gallery-gdrive-btn');
+        if (cfgBtn) cfgBtn.click();
+      }
+    });
+  }
+
+  return renderBar;
 }
 
 // ─── Google Drive Modal & Direct Picker Integration ───────────
@@ -872,7 +1005,7 @@ async function fetchFolderFilesRecursively(folderId, token, progressCallback) {
 
 function initGoogleDriveModal(onAddFiles) {
   const modal = document.getElementById('gdrive-modal');
-  const openBtn = document.getElementById('gallery-gdrive-btn');
+  const openBtn = document.getElementById('gallery-gdrive-config-btn') || document.getElementById('gallery-gdrive-btn');
   const configBtn = document.getElementById('gallery-gdrive-config-btn');
   const closeBtn = document.getElementById('gdrive-modal-close');
   const fetchBtn = document.getElementById('gdrive-fetch-btn');
@@ -1292,7 +1425,9 @@ function initGoogleDriveModal(onAddFiles) {
 
       if (downloaded.length) {
         onAddFiles(downloaded, true);
-        setStatus('gallery', downloaded.length + '장의 사진을 성공적으로 불러왔습니다!', 'success');
+        await GDriveCache.savePhotos(downloaded, folderId, folderName);
+        if (typeof updateCacheBarUI === 'function') updateCacheBarUI();
+        setStatus('gallery', downloaded.length + '장의 사진을 성공적으로 불러왔으며, 다음에 바로 열 수 있도록 캐시 저장되었습니다!', 'success');
       } else {
         setStatus('gallery', '사진을 다운로드하지 못했습니다.', 'error');
       }
@@ -1457,6 +1592,11 @@ function initGoogleDriveModal(onAddFiles) {
       linkStatus.textContent = '오류: ' + err.message;
       linkStatus.className = 'status error';
     }
+  });
+
+  // IndexedDB 캐시 바 초기화 (한 번 불러온 파일 바로 열기 지원)
+  updateCacheBarUI = initGDriveCacheBar(onAddFiles, function (fId, fName) {
+    startDownloadFromFolder(fId, fName);
   });
 }
 

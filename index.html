@@ -53,10 +53,18 @@
 
       <div class="source-buttons-grid">
         <button type="button" class="btn btn-primary" id="gallery-files-btn">📁 파일 선택 (내 컴퓨터 / 모바일)</button>
-        <button type="button" class="btn btn-secondary" id="gallery-folder-btn">📂 내 컴퓨터 폴더 통째로 열기</button>
-        <button type="button" class="btn btn-info" id="gallery-gdrive-btn">☁️ 구글 드라이브 (내 드라이브)</button>
-        <button type="button" class="btn btn-secondary" id="gallery-add-btn" disabled>➕ 사진 더 추가</button>
-        <button type="button" class="btn btn-secondary" id="gallery-gdrive-config-btn" title="구글 드라이브 키 설정 변경" style="font-size: 0.85rem;">⚙️ 드라이브 키 설정</button>
+        <button type="button" class="btn btn-info" id="gallery-gdrive-config-btn">☁️ 구글 드라이브 탐색 및 설정</button>
+      </div>
+
+      <!-- 최근 구글 드라이브 사진 IndexedDB 캐시 바 -->
+      <div id="gdrive-cache-bar" class="hidden" style="margin: 0.75rem 0; padding: 0.75rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+        <div style="font-size: 0.92rem; color: var(--text);">
+          💾 <strong>최근 구글 드라이브 사진</strong>: <span id="gdrive-cache-info" style="color: var(--primary); font-weight: 600;">0장</span>
+        </div>
+        <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+          <button type="button" class="btn btn-primary btn-compact" id="gdrive-cache-open-btn">⚡ 바로 열기</button>
+          <button type="button" class="btn btn-secondary btn-compact" id="gdrive-cache-refresh-btn">🔄 드라이브에서 다시 받기</button>
+        </div>
       </div>
 
       <div class="drop-zone" data-drop="gallery">
