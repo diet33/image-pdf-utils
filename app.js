@@ -825,6 +825,51 @@ function initGallery() {
 let gdriveAccessToken = null;
 let gdriveTokenExpiresAt = 0;
 
+async function fetchFolderFilesRecursively(folderId, token, progressCallback) {
+  let allImages = [];
+  let pageToken = null;
+
+  do {
+    const q = encodeURIComponent("'" + folderId + "' in parents and trashed = false");
+    const fields = encodeURIComponent("nextPageToken, files(id, name, mimeType, size)");
+    let url = "https://www.googleapis.com/drive/v3/files?q=" + q + "&fields=" + fields + "&pageSize=1000";
+    if (pageToken) url += "&pageToken=" + pageToken;
+
+    try {
+      const res = await fetch(url, {
+        headers: { Authorization: "Bearer " + token }
+      });
+      if (!res.ok) {
+        console.warn("Folder query failed for id:", folderId);
+        break;
+      }
+      const data = await res.json();
+      pageToken = data.nextPageToken;
+
+      const files = data.files || [];
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        if (f.mimeType === "application/vnd.google-apps.folder") {
+          if (progressCallback) progressCallback("서브폴더 탐색 중: " + f.name);
+          await yieldToMain();
+          const subImages = await fetchFolderFilesRecursively(f.id, token, progressCallback);
+          allImages = allImages.concat(subImages);
+        } else if (
+          (f.mimeType && f.mimeType.startsWith("image/")) ||
+          /\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i.test(f.name)
+        ) {
+          allImages.push(f);
+        }
+      }
+    } catch (e) {
+      console.error("Recursive fetch error:", e);
+      break;
+    }
+  } while (pageToken);
+
+  return allImages;
+}
+
 function openGooglePicker(clientId, apiKey, onAddFiles) {
   if (typeof google === 'undefined' || !google.accounts || typeof gapi === 'undefined') {
     alert('Google API 클라이언트 라이브러리가 아직 로드되지 않았습니다. 잠시 후 다시 시도해 주세요.');
@@ -833,38 +878,100 @@ function openGooglePicker(clientId, apiKey, onAddFiles) {
 
   function launchPicker(token) {
     gapi.load('picker', function () {
-      const view = new google.picker.DocsView(google.picker.ViewId.DOCS_IMAGES);
-      view.setMimeTypes('image/png,image/jpeg,image/webp,image/gif,image/heic,image/bmp');
+      // 1) 내 드라이브 뷰 (폴더와 파일 모두 선택 가능)
+      const myDriveView = new google.picker.DocsView(google.picker.ViewId.DOCS)
+        .setIncludeFolders(true)
+        .setSelectFolderEnabled(true)
+        .setTitle('내 드라이브');
+
+      // 2) 폴더 전용 선택 뷰 (폴더 통째로 선택 편의)
+      const folderView = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+        .setIncludeFolders(true)
+        .setSelectFolderEnabled(true)
+        .setTitle('폴더 통째로 선택');
+
+      // 3) 사진 모아보기 뷰
+      const imagesView = new google.picker.DocsView(google.picker.ViewId.DOCS_IMAGES)
+        .setIncludeFolders(true)
+        .setSelectFolderEnabled(true)
+        .setTitle('사진 모아보기');
 
       const picker = new google.picker.PickerBuilder()
-        .addView(view)
+        .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+        .enableFeature(google.picker.Feature.SUPPORT_DRIVES)
+        .addView(myDriveView)
+        .addView(folderView)
+        .addView(imagesView)
         .setOAuthToken(token)
         .setDeveloperKey(apiKey)
         .setCallback(async function (data) {
           if (data.action === google.picker.Action.PICKED) {
             setLoading('gallery', true);
-            setStatus('gallery', '구글 드라이브에서 사진을 다운로드하는 중...', 'info');
-            const files = [];
-            for (let i = 0; i < data.docs.length; i++) {
-              const doc = data.docs[i];
-              try {
-                const res = await fetch(
-                  'https://www.googleapis.com/drive/v3/files/' + doc.id + '?alt=media',
-                  { headers: { Authorization: 'Bearer ' + token } }
-                );
-                if (!res.ok) throw new Error('다운로드 실패');
-                const blob = await res.blob();
-                files.push(new File([blob], doc.name, { type: doc.mimeType || 'image/jpeg' }));
-              } catch (e) {
-                console.error('File download error:', e);
+            setStatus('gallery', '선택한 폴더 및 사진을 분석하는 중...', 'info');
+
+            try {
+              let targetItems = [];
+
+              for (let i = 0; i < data.docs.length; i++) {
+                const doc = data.docs[i];
+                if (doc.type === 'folder' || doc.mimeType === 'application/vnd.google-apps.folder') {
+                  setStatus('gallery', '「' + doc.name + '」 폴더 및 모든 하위 서브폴더 검색 중...', 'info');
+                  const folderImages = await fetchFolderFilesRecursively(doc.id, token, function (msg) {
+                    setStatus('gallery', msg, 'info');
+                  });
+                  targetItems = targetItems.concat(folderImages);
+                } else if (
+                  (doc.mimeType && doc.mimeType.startsWith('image/')) ||
+                  /\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i.test(doc.name)
+                ) {
+                  targetItems.push(doc);
+                }
               }
-            }
-            setLoading('gallery', false);
-            if (files.length) {
-              onAddFiles(files, true);
-              setStatus('gallery', files.length + '장의 구글 드라이브 사진을 불러왔습니다!', 'success');
-            } else {
-              setStatus('gallery', '구글 드라이브 사진을 가져오지 못했습니다.', 'error');
+
+              // 중복 파일 ID 제거
+              const uniqueMap = new Map();
+              targetItems.forEach(function (it) {
+                if (!uniqueMap.has(it.id)) uniqueMap.set(it.id, it);
+              });
+              targetItems = Array.from(uniqueMap.values());
+
+              if (targetItems.length === 0) {
+                setStatus('gallery', '선택한 폴더/위치에 이미지 파일이 없습니다.', 'warning');
+                setLoading('gallery', false);
+                return;
+              }
+
+              setStatus('gallery', '총 ' + targetItems.length + '장의 사진을 다운로드하는 중... (0/' + targetItems.length + ')', 'info');
+
+              const downloadedFiles = [];
+              const maxDownload = Math.min(targetItems.length, MAX_GALLERY_PHOTOS);
+
+              for (let i = 0; i < maxDownload; i++) {
+                const doc = targetItems[i];
+                setStatus('gallery', '사진 다운로드 중 (' + (i + 1) + '/' + maxDownload + '): ' + doc.name, 'info');
+                try {
+                  const res = await fetch(
+                    'https://www.googleapis.com/drive/v3/files/' + doc.id + '?alt=media',
+                    { headers: { Authorization: 'Bearer ' + token } }
+                  );
+                  if (!res.ok) throw new Error('다운로드 실패');
+                  const blob = await res.blob();
+                  downloadedFiles.push(new File([blob], doc.name, { type: doc.mimeType || 'image/jpeg' }));
+                } catch (e) {
+                  console.error('File download error for:', doc.name, e);
+                }
+              }
+
+              if (downloadedFiles.length) {
+                onAddFiles(downloadedFiles, true);
+                setStatus('gallery', downloadedFiles.length + '장의 구글 드라이브 사진을 성공적으로 불러왔습니다!', 'success');
+              } else {
+                setStatus('gallery', '사진을 다운로드하지 못했습니다.', 'error');
+              }
+            } catch (err) {
+              setStatus('gallery', '오류 발생: ' + err.message, 'error');
+            } finally {
+              setLoading('gallery', false);
             }
           }
         })
