@@ -870,142 +870,6 @@ async function fetchFolderFilesRecursively(folderId, token, progressCallback) {
   return allImages;
 }
 
-function openGooglePicker(clientId, apiKey, onAddFiles) {
-  if (typeof google === 'undefined' || !google.accounts || typeof gapi === 'undefined') {
-    alert('Google API 클라이언트 라이브러리가 아직 로드되지 않았습니다. 잠시 후 다시 시도해 주세요.');
-    return;
-  }
-
-  function launchPicker(token) {
-    gapi.load('picker', function () {
-      // 1) 내 드라이브 뷰 (폴더와 파일 모두 선택 가능)
-      const myDriveView = new google.picker.DocsView(google.picker.ViewId.DOCS)
-        .setIncludeFolders(true)
-        .setSelectFolderEnabled(true)
-        .setTitle('내 드라이브');
-
-      // 2) 폴더 전용 선택 뷰 (폴더 통째로 선택 편의)
-      const folderView = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
-        .setIncludeFolders(true)
-        .setSelectFolderEnabled(true)
-        .setTitle('폴더 통째로 선택');
-
-      // 3) 사진 모아보기 뷰
-      const imagesView = new google.picker.DocsView(google.picker.ViewId.DOCS_IMAGES)
-        .setIncludeFolders(true)
-        .setSelectFolderEnabled(true)
-        .setTitle('사진 모아보기');
-
-      const picker = new google.picker.PickerBuilder()
-        .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
-        .enableFeature(google.picker.Feature.SUPPORT_DRIVES)
-        .addView(myDriveView)
-        .addView(folderView)
-        .addView(imagesView)
-        .setOAuthToken(token)
-        .setDeveloperKey(apiKey)
-        .setCallback(async function (data) {
-          if (data.action === google.picker.Action.PICKED) {
-            setLoading('gallery', true);
-            setStatus('gallery', '선택한 폴더 및 사진을 분석하는 중...', 'info');
-
-            try {
-              let targetItems = [];
-
-              for (let i = 0; i < data.docs.length; i++) {
-                const doc = data.docs[i];
-                if (doc.type === 'folder' || doc.mimeType === 'application/vnd.google-apps.folder') {
-                  setStatus('gallery', '「' + doc.name + '」 폴더 및 모든 하위 서브폴더 검색 중...', 'info');
-                  const folderImages = await fetchFolderFilesRecursively(doc.id, token, function (msg) {
-                    setStatus('gallery', msg, 'info');
-                  });
-                  targetItems = targetItems.concat(folderImages);
-                } else if (
-                  (doc.mimeType && doc.mimeType.startsWith('image/')) ||
-                  /\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i.test(doc.name)
-                ) {
-                  targetItems.push(doc);
-                }
-              }
-
-              // 중복 파일 ID 제거
-              const uniqueMap = new Map();
-              targetItems.forEach(function (it) {
-                if (!uniqueMap.has(it.id)) uniqueMap.set(it.id, it);
-              });
-              targetItems = Array.from(uniqueMap.values());
-
-              if (targetItems.length === 0) {
-                setStatus('gallery', '선택한 폴더/위치에 이미지 파일이 없습니다.', 'warning');
-                setLoading('gallery', false);
-                return;
-              }
-
-              setStatus('gallery', '총 ' + targetItems.length + '장의 사진을 다운로드하는 중... (0/' + targetItems.length + ')', 'info');
-
-              const downloadedFiles = [];
-              const maxDownload = Math.min(targetItems.length, MAX_GALLERY_PHOTOS);
-
-              for (let i = 0; i < maxDownload; i++) {
-                const doc = targetItems[i];
-                setStatus('gallery', '사진 다운로드 중 (' + (i + 1) + '/' + maxDownload + '): ' + doc.name, 'info');
-                try {
-                  const res = await fetch(
-                    'https://www.googleapis.com/drive/v3/files/' + doc.id + '?alt=media',
-                    { headers: { Authorization: 'Bearer ' + token } }
-                  );
-                  if (!res.ok) throw new Error('다운로드 실패');
-                  const blob = await res.blob();
-                  downloadedFiles.push(new File([blob], doc.name, { type: doc.mimeType || 'image/jpeg' }));
-                } catch (e) {
-                  console.error('File download error for:', doc.name, e);
-                }
-              }
-
-              if (downloadedFiles.length) {
-                onAddFiles(downloadedFiles, true);
-                setStatus('gallery', downloadedFiles.length + '장의 구글 드라이브 사진을 성공적으로 불러왔습니다!', 'success');
-              } else {
-                setStatus('gallery', '사진을 다운로드하지 못했습니다.', 'error');
-              }
-            } catch (err) {
-              setStatus('gallery', '오류 발생: ' + err.message, 'error');
-            } finally {
-              setLoading('gallery', false);
-            }
-          }
-        })
-        .build();
-      picker.setVisible(true);
-    });
-  }
-
-  // 기존 유효 토큰이 있다면 바로 팝업 없이 피커 실행!
-  const now = Date.now();
-  if (gdriveAccessToken && now < gdriveTokenExpiresAt) {
-    launchPicker(gdriveAccessToken);
-    return;
-  }
-
-  // 새 토큰 요청 (이미 권한 허용한 경우 자동 승인)
-  const tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: clientId,
-    scope: 'https://www.googleapis.com/auth/drive.readonly',
-    callback: function (response) {
-      if (response.error !== undefined) {
-        alert('Google 로그인 인증 실패: ' + response.error + '\n설정 정보를 확인해 주세요.');
-        document.getElementById('gdrive-modal').classList.remove('hidden');
-        return;
-      }
-      gdriveAccessToken = response.access_token;
-      gdriveTokenExpiresAt = Date.now() + ((response.expires_in || 3600) - 100) * 1000;
-      launchPicker(gdriveAccessToken);
-    }
-  });
-
-  tokenClient.requestAccessToken({ prompt: '' });
-}
-
 function initGoogleDriveModal(onAddFiles) {
   const modal = document.getElementById('gdrive-modal');
   const openBtn = document.getElementById('gallery-gdrive-btn');
@@ -1014,8 +878,68 @@ function initGoogleDriveModal(onAddFiles) {
   const fetchBtn = document.getElementById('gdrive-fetch-btn');
   const urlInput = document.getElementById('gdrive-share-url');
   const linkStatus = document.getElementById('gdrive-link-status');
-  const pickerBtn = document.getElementById('gdrive-picker-btn');
-  const clearBtn = document.getElementById('gdrive-clear-btn');
+  const saveKeyBtn = document.getElementById('gdrive-picker-btn');
+  const clearKeyBtn = document.getElementById('gdrive-clear-btn');
+
+  // 탐색기 엘리먼트들
+  const navTabs = modal.querySelectorAll('.drive-nav-tab');
+  const explorerPanel = document.getElementById('gdrive-explorer-panel');
+  const linkPanel = document.getElementById('gdrive-link-panel');
+  const configPanel = document.getElementById('gdrive-config-panel');
+  const panelHint = document.getElementById('gdrive-panel-hint');
+  const breadcrumbEl = document.getElementById('drive-breadcrumb');
+  const fileListEl = document.getElementById('drive-file-list');
+  const upBtn = document.getElementById('drive-up-btn');
+  const fetchAllBtn = document.getElementById('drive-fetch-all-btn');
+
+  const gdriveState = {
+    activeTab: 'mydrive', // 'mydrive' | 'computers' | 'share-link' | 'config'
+    currentFolderId: 'root',
+    currentFolderName: '내 드라이브',
+    pathHistory: [{ id: 'root', name: '내 드라이브' }],
+    token: null,
+    tokenExpiresAt: 0,
+    cachedComputers: []
+  };
+
+  function switchDriveTab(tabName) {
+    gdriveState.activeTab = tabName;
+    navTabs.forEach(function (tab) {
+      if (tab.dataset.driveTab === tabName) tab.classList.add('active');
+      else tab.classList.remove('active');
+    });
+
+    explorerPanel.classList.add('hidden');
+    linkPanel.classList.add('hidden');
+    configPanel.classList.add('hidden');
+
+    if (tabName === 'mydrive') {
+      explorerPanel.classList.remove('hidden');
+      if (panelHint) panelHint.style.display = 'none';
+      gdriveState.pathHistory = [{ id: 'root', name: '내 드라이브' }];
+      requireTokenAndLoad(function () {
+        loadDriveFolder('root', '내 드라이브');
+      });
+    } else if (tabName === 'computers') {
+      explorerPanel.classList.remove('hidden');
+      if (panelHint) panelHint.style.display = 'block';
+      gdriveState.pathHistory = [{ id: '__computers__', name: '컴퓨터' }];
+      requireTokenAndLoad(function () {
+        loadComputersRoot();
+      });
+    } else if (tabName === 'share-link') {
+      linkPanel.classList.remove('hidden');
+    } else if (tabName === 'config') {
+      configPanel.classList.remove('hidden');
+      populateSavedKeys();
+    }
+  }
+
+  navTabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      switchDriveTab(tab.dataset.driveTab);
+    });
+  });
 
   function populateSavedKeys() {
     const savedClientId = localStorage.getItem('gdrive_client_id');
@@ -1024,25 +948,348 @@ function initGoogleDriveModal(onAddFiles) {
     if (savedApiKey) document.getElementById('gdrive-api-key').value = savedApiKey;
   }
 
-  // 1) 구글 드라이브 메인 버튼: 이미 키가 저장되어 있으면 모달 없이 바로 내 드라이브 파일 탐색기 실행!
-  openBtn.addEventListener('click', function () {
-    const savedClientId = localStorage.getItem('gdrive_client_id');
-    const savedApiKey = localStorage.getItem('gdrive_api_key');
+  function getSavedClientId() {
+    return localStorage.getItem('gdrive_client_id') || '';
+  }
 
-    if (savedClientId && savedApiKey) {
-      openGooglePicker(savedClientId, savedApiKey, onAddFiles);
-    } else {
-      // 처음이라 키가 없으면 설정 모달 열기
-      populateSavedKeys();
-      modal.classList.remove('hidden');
+  function requireTokenAndLoad(onSuccess) {
+    const clientId = getSavedClientId();
+    if (!clientId) {
+      alert('구글 드라이브를 탐색하려면 먼저 Client ID를 등록해 주세요.');
+      switchDriveTab('config');
+      return;
+    }
+
+    const now = Date.now();
+    if (gdriveState.token && now < gdriveState.tokenExpiresAt) {
+      onSuccess(gdriveState.token);
+      return;
+    }
+
+    if (typeof google === 'undefined' || !google.accounts) {
+      fileListEl.innerHTML = '<div class="drive-empty">Google API 클라이언트가 로드되지 않았습니다. 인터넷 연결을 확인해 주세요.</div>';
+      return;
+    }
+
+    fileListEl.innerHTML = '<div class="drive-loading">구글 계정 인증 요청 중...</div>';
+
+    const tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: 'https://www.googleapis.com/auth/drive.readonly',
+      callback: function (response) {
+        if (response.error !== undefined) {
+          fileListEl.innerHTML = '<div class="drive-empty">인증 실패: ' + escapeHtml(response.error) + '<br><small>API 설정이나 구글 계정 권한을 확인해 주세요.</small></div>';
+          return;
+        }
+        gdriveState.token = response.access_token;
+        gdriveState.tokenExpiresAt = Date.now() + ((response.expires_in || 3600) - 120) * 1000;
+        onSuccess(gdriveState.token);
+      }
+    });
+
+    tokenClient.requestAccessToken({ prompt: '' });
+  }
+
+  function renderBreadcrumb() {
+    breadcrumbEl.innerHTML = '';
+    gdriveState.pathHistory.forEach(function (item, index) {
+      if (index > 0) {
+        const sep = document.createElement('span');
+        sep.className = 'drive-breadcrumb-separator';
+        sep.textContent = '>';
+        breadcrumbEl.appendChild(sep);
+      }
+      const span = document.createElement('span');
+      span.className = 'drive-breadcrumb-item';
+      span.textContent = item.name;
+      span.addEventListener('click', function () {
+        if (index === gdriveState.pathHistory.length - 1) return;
+        gdriveState.pathHistory = gdriveState.pathHistory.slice(0, index + 1);
+        if (item.id === '__computers__') {
+          loadComputersRoot();
+        } else {
+          loadDriveFolder(item.id, item.name);
+        }
+      });
+      breadcrumbEl.appendChild(span);
+    });
+  }
+
+  // 일반 폴더 로드
+  async function loadDriveFolder(folderId, folderName) {
+    gdriveState.currentFolderId = folderId;
+    gdriveState.currentFolderName = folderName;
+    renderBreadcrumb();
+
+    fileListEl.innerHTML = '<div class="drive-loading">폴더 목록을 불러오는 중...</div>';
+
+    try {
+      const q = encodeURIComponent("'" + folderId + "' in parents and trashed = false");
+      const fields = encodeURIComponent("files(id, name, mimeType, size, modifiedTime)");
+      const url = "https://www.googleapis.com/drive/v3/files?q=" + q + "&fields=" + fields + "&orderBy=folder,name&pageSize=1000";
+
+      const res = await fetch(url, {
+        headers: { Authorization: "Bearer " + gdriveState.token }
+      });
+
+      if (!res.ok) {
+        throw new Error('폴더 목록을 가져오지 못했습니다. (' + res.status + ')');
+      }
+
+      const data = await res.json();
+      const files = data.files || [];
+
+      renderDriveItemList(files);
+    } catch (err) {
+      fileListEl.innerHTML = '<div class="drive-empty">오류 발생: ' + escapeHtml(err.message) + '</div>';
+    }
+  }
+
+  // 아이폰 앱의 '컴퓨터' 탭 전용 루트 로드
+  async function loadComputersRoot() {
+    gdriveState.currentFolderId = '__computers__';
+    gdriveState.currentFolderName = '컴퓨터';
+    renderBreadcrumb();
+
+    fileListEl.innerHTML = '<div class="drive-loading">동기화된 컴퓨터 장치 검색 중...</div>';
+
+    try {
+      // 1) 전체 폴더 검색 중 컴퓨터 관련 또는 최상위 폴더 탐색
+      const q = encodeURIComponent("trashed = false and mimeType = 'application/vnd.google-apps.folder'");
+      const fields = encodeURIComponent("files(id, name, parents, modifiedTime)");
+      const url = "https://www.googleapis.com/drive/v3/files?q=" + q + "&fields=" + fields + "&pageSize=100";
+
+      const res = await fetch(url, {
+        headers: { Authorization: "Bearer " + gdriveState.token }
+      });
+
+      const items = [];
+      if (res.ok) {
+        const data = await res.json();
+        const allFolders = data.files || [];
+
+        // '내 컴퓨터', '컴퓨터', 'Computer' 가 포함된 폴더 또는 부모가 root가 아닌 특수 폴더 필터링
+        allFolders.forEach(function (f) {
+          const isComputerName = /내\s*컴퓨터|computer|laptop|pc/i.test(f.name);
+          const isNonRootParent = f.parents && !f.parents.includes('root');
+          if (isComputerName || isNonRootParent) {
+            items.push(f);
+          }
+        });
+
+        // 만약 필터링된 게 없더라도 전체 폴더 리스트 제공
+        if (items.length === 0 && allFolders.length > 0) {
+          allFolders.slice(0, 10).forEach(function (f) { items.push(f); });
+        }
+      }
+
+      // 항상 아이폰 화면처럼 '💻 내 컴퓨터' 기본 진입 항목 보장
+      if (items.length === 0) {
+        items.push({
+          id: 'root',
+          name: '내 컴퓨터',
+          isDefaultPc: true
+        });
+      }
+
+      renderDriveItemList(items, true);
+    } catch (err) {
+      fileListEl.innerHTML = '<div class="drive-empty">컴퓨터 목록 로드 실패: ' + escapeHtml(err.message) + '</div>';
+    }
+  }
+
+  function renderDriveItemList(items, isComputersView) {
+    fileListEl.innerHTML = '';
+
+    if (!items || items.length === 0) {
+      fileListEl.innerHTML = '<div class="drive-empty">이 폴더에 파일이 없습니다.</div>';
+      return;
+    }
+
+    items.forEach(function (item) {
+      const isFolder = item.mimeType === 'application/vnd.google-apps.folder' || item.isDefaultPc;
+      const isImage = !isFolder && (
+        (item.mimeType && item.mimeType.startsWith('image/')) ||
+        /\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i.test(item.name)
+      );
+
+      const div = document.createElement('div');
+      div.className = 'drive-item';
+
+      const mainDiv = document.createElement('div');
+      mainDiv.className = 'drive-item-main';
+
+      const iconSpan = document.createElement('span');
+      iconSpan.className = 'drive-item-icon';
+      if (isComputersView || item.isDefaultPc || /컴퓨터|computer/i.test(item.name)) {
+        iconSpan.textContent = '💻';
+      } else if (isFolder) {
+        iconSpan.textContent = '📁';
+      } else if (isImage) {
+        iconSpan.textContent = '🖼️';
+      } else {
+        iconSpan.textContent = '📄';
+      }
+      mainDiv.appendChild(iconSpan);
+
+      const textDiv = document.createElement('div');
+      textDiv.className = 'drive-item-text';
+
+      const nameDiv = document.createElement('div');
+      nameDiv.className = 'drive-item-name';
+      nameDiv.textContent = item.name;
+      textDiv.appendChild(nameDiv);
+
+      const metaDiv = document.createElement('div');
+      metaDiv.className = 'drive-item-meta';
+      let metaText = isFolder ? '폴더' : formatSize(item.size || 0);
+      if (item.modifiedTime) {
+        metaText += ' · ' + new Date(item.modifiedTime).toLocaleDateString();
+      }
+      metaDiv.textContent = metaText;
+      textDiv.appendChild(metaDiv);
+
+      mainDiv.appendChild(textDiv);
+      div.appendChild(mainDiv);
+
+      // 폴더 클릭 시 진입
+      if (isFolder) {
+        div.addEventListener('click', function () {
+          gdriveState.pathHistory.push({ id: item.id, name: item.name });
+          loadDriveFolder(item.id, item.name);
+        });
+
+        // 개별 폴더 가져오기 버튼
+        const fetchBtn = document.createElement('button');
+        fetchBtn.type = 'button';
+        fetchBtn.className = 'btn btn-secondary btn-compact drive-item-btn';
+        fetchBtn.textContent = '가져오기';
+        fetchBtn.title = '이 폴더와 하위 서브폴더의 사진 전체 가져오기';
+        fetchBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          startDownloadFromFolder(item.id, item.name);
+        });
+        div.appendChild(fetchBtn);
+      } else if (isImage) {
+        // 단일 이미지 클릭 시 가져오기
+        const getBtn = document.createElement('button');
+        getBtn.type = 'button';
+        getBtn.className = 'btn btn-primary btn-compact drive-item-btn';
+        getBtn.textContent = '선택';
+        getBtn.addEventListener('click', async function (e) {
+          e.stopPropagation();
+          modal.classList.add('hidden');
+          setLoading('gallery', true);
+          setStatus('gallery', item.name + ' 다운로드 중...', 'info');
+          try {
+            const res = await fetch('https://www.googleapis.com/drive/v3/files/' + item.id + '?alt=media', {
+              headers: { Authorization: 'Bearer ' + gdriveState.token }
+            });
+            const blob = await res.blob();
+            const file = new File([blob], item.name, { type: item.mimeType || 'image/jpeg' });
+            onAddFiles([file], true);
+            setStatus('gallery', item.name + ' 불러오기 완료!', 'success');
+          } catch (err) {
+            setStatus('gallery', '다운로드 실패: ' + err.message, 'error');
+          } finally {
+            setLoading('gallery', false);
+          }
+        });
+        div.appendChild(getBtn);
+      }
+
+      fileListEl.appendChild(div);
+    });
+  }
+
+  // 상위 폴더로 이동
+  upBtn.addEventListener('click', function () {
+    if (gdriveState.pathHistory.length > 1) {
+      gdriveState.pathHistory.pop();
+      const parent = gdriveState.pathHistory[gdriveState.pathHistory.length - 1];
+      if (parent.id === '__computers__') {
+        loadComputersRoot();
+      } else {
+        loadDriveFolder(parent.id, parent.name);
+      }
     }
   });
 
-  // 2) 설정 키 변경 버튼: 언제든 모달을 열어 키를 수정하거나 공유 링크 사용 가능
+  // 현재 폴더 및 하위 서브폴더 전체 사진 일괄 가져오기
+  async function startDownloadFromFolder(folderId, folderName) {
+    if (!folderId || folderId === '__computers__') {
+      alert('먼저 가져올 대상 폴더를 열어주세요.');
+      return;
+    }
+
+    modal.classList.add('hidden');
+    setLoading('gallery', true);
+    setStatus('gallery', '「' + folderName + '」 폴더 및 모든 하위 서브폴더 검색 중...', 'info');
+
+    try {
+      const allImages = await fetchFolderFilesRecursively(folderId, gdriveState.token, function (msg) {
+        setStatus('gallery', msg, 'info');
+      });
+
+      if (!allImages || allImages.length === 0) {
+        setStatus('gallery', '「' + folderName + '」 폴더에 이미지 파일이 없습니다.', 'warning');
+        setLoading('gallery', false);
+        return;
+      }
+
+      const maxDownload = Math.min(allImages.length, MAX_GALLERY_PHOTOS);
+      setStatus('gallery', '총 ' + allImages.length + '장의 사진을 다운로드하는 중... (0/' + maxDownload + ')', 'info');
+
+      const downloaded = [];
+      for (let i = 0; i < maxDownload; i++) {
+        const item = allImages[i];
+        setStatus('gallery', '사진 다운로드 중 (' + (i + 1) + '/' + maxDownload + '): ' + item.name, 'info');
+        try {
+          const res = await fetch('https://www.googleapis.com/drive/v3/files/' + item.id + '?alt=media', {
+            headers: { Authorization: 'Bearer ' + gdriveState.token }
+          });
+          if (!res.ok) throw new Error('다운로드 실패');
+          const blob = await res.blob();
+          downloaded.push(new File([blob], item.name, { type: item.mimeType || 'image/jpeg' }));
+        } catch (e) {
+          console.error('File download error:', item.name, e);
+        }
+      }
+
+      if (downloaded.length) {
+        onAddFiles(downloaded, true);
+        setStatus('gallery', downloaded.length + '장의 사진을 성공적으로 불러왔습니다!', 'success');
+      } else {
+        setStatus('gallery', '사진을 다운로드하지 못했습니다.', 'error');
+      }
+    } catch (err) {
+      setStatus('gallery', '오류 발생: ' + err.message, 'error');
+    } finally {
+      setLoading('gallery', false);
+    }
+  }
+
+  // 이 폴더 전체 사진 가져오기 버튼 클릭
+  fetchAllBtn.addEventListener('click', function () {
+    startDownloadFromFolder(gdriveState.currentFolderId, gdriveState.currentFolderName);
+  });
+
+  // 메인 '☁️ 구글 드라이브' 버튼 클릭 시 모달 열기
+  openBtn.addEventListener('click', function () {
+    modal.classList.remove('hidden');
+    const clientId = getSavedClientId();
+    if (clientId) {
+      switchDriveTab('mydrive');
+    } else {
+      switchDriveTab('config');
+    }
+  });
+
+  // '⚙️ 드라이브 키 설정' 버튼 클릭 시
   if (configBtn) {
     configBtn.addEventListener('click', function () {
-      populateSavedKeys();
       modal.classList.remove('hidden');
+      switchDriveTab('config');
     });
   }
 
@@ -1058,20 +1305,40 @@ function initGoogleDriveModal(onAddFiles) {
     }
   });
 
-  // 저장된 키 삭제
-  if (clearBtn) {
-    clearBtn.addEventListener('click', function () {
-      localStorage.removeItem('gdrive_client_id');
-      localStorage.removeItem('gdrive_api_key');
-      gdriveAccessToken = null;
-      gdriveTokenExpiresAt = 0;
-      document.getElementById('gdrive-client-id').value = '';
-      document.getElementById('gdrive-api-key').value = '';
-      alert('저장된 구글 드라이브 Client ID와 API Key가 삭제되었습니다.');
+  // 키 저장 버튼
+  if (saveKeyBtn) {
+    saveKeyBtn.addEventListener('click', function () {
+      const clientId = document.getElementById('gdrive-client-id').value.trim();
+      const apiKey = document.getElementById('gdrive-api-key').value.trim();
+
+      if (!clientId) {
+        alert('Google Client ID를 입력해 주세요.');
+        return;
+      }
+
+      localStorage.setItem('gdrive_client_id', clientId);
+      if (apiKey) localStorage.setItem('gdrive_api_key', apiKey);
+
+      alert('구글 드라이브 설정이 저장되었습니다. 내 드라이브 탐색기로 연결합니다.');
+      switchDriveTab('mydrive');
     });
   }
 
-  // 방법 1: 공유 링크로 사진 가져오기
+  // 키 삭제 버튼
+  if (clearKeyBtn) {
+    clearKeyBtn.addEventListener('click', function () {
+      localStorage.removeItem('gdrive_client_id');
+      localStorage.removeItem('gdrive_api_key');
+      gdriveState.token = null;
+      gdriveState.tokenExpiresAt = 0;
+      document.getElementById('gdrive-client-id').value = '';
+      document.getElementById('gdrive-api-key').value = '';
+      alert('저장된 구글 드라이브 인증 정보가 삭제되었습니다.');
+      switchDriveTab('config');
+    });
+  }
+
+  // 방법: 공유 링크 가져오기
   fetchBtn.addEventListener('click', async function () {
     const url = urlInput.value.trim();
     if (!url) {
@@ -1092,7 +1359,7 @@ function initGoogleDriveModal(onAddFiles) {
       return;
     }
 
-    linkStatus.textContent = '구글 드라이브에서 사진을 다운로드하는 중...';
+    linkStatus.textContent = '사진을 다운로드하는 중...';
     linkStatus.className = 'status info';
 
     const directUrl = 'https://lh3.googleusercontent.com/d/' + fileId;
@@ -1144,7 +1411,7 @@ function initGoogleDriveModal(onAddFiles) {
             }, 1200);
           })
           .catch(function () {
-            linkStatus.textContent = '구글 드라이브 사진을 가져오지 못했습니다. 링크 공유 설정이 "링크가 있는 모든 사용자에게 공개"로 되어 있는지 확인해 주세요.';
+            linkStatus.textContent = '사진을 가져오지 못했습니다. 링크 공유 설정이 공개인지 확인해 주세요.';
             linkStatus.className = 'status error';
           });
       };
@@ -1153,23 +1420,6 @@ function initGoogleDriveModal(onAddFiles) {
       linkStatus.textContent = '오류: ' + err.message;
       linkStatus.className = 'status error';
     }
-  });
-
-  // 방법 2: Google Picker 키 저장 후 즉시 실행!
-  pickerBtn.addEventListener('click', function () {
-    const clientId = document.getElementById('gdrive-client-id').value.trim();
-    const apiKey = document.getElementById('gdrive-api-key').value.trim();
-
-    if (!clientId || !apiKey) {
-      alert('Google Client ID와 API Key를 모두 입력해야 내 드라이브 파일 탐색기를 열 수 있습니다.');
-      return;
-    }
-
-    localStorage.setItem('gdrive_client_id', clientId);
-    localStorage.setItem('gdrive_api_key', apiKey);
-    modal.classList.add('hidden');
-
-    openGooglePicker(clientId, apiKey, onAddFiles);
   });
 }
 

@@ -1357,3 +1357,142 @@ body.dark-theme .reorder-btn {
 body.dark-theme .reorder-btn:hover {
   background: #334155;
 }
+
+/* ─── Google Drive In-App Explorer UI ─── */
+.drive-modal-box {
+  max-width: 680px;
+  width: 95%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+.drive-tab-bar {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 2px solid var(--border);
+  padding: 0 0.5rem;
+  margin-bottom: 0.75rem;
+  overflow-x: auto;
+}
+.drive-nav-tab {
+  background: none;
+  border: none;
+  padding: 0.65rem 1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  white-space: nowrap;
+}
+.drive-nav-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+.drive-nav-tab:hover:not(.active) {
+  color: var(--text);
+}
+.drive-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+.drive-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  background: var(--bg);
+  padding: 0.4rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  flex: 1;
+  min-width: 180px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.drive-breadcrumb-item {
+  cursor: pointer;
+  color: var(--primary);
+  font-weight: 500;
+}
+.drive-breadcrumb-item:hover {
+  text-decoration: underline;
+}
+.drive-breadcrumb-separator {
+  color: var(--text-muted);
+}
+.drive-list-wrap {
+  flex: 1;
+  min-height: 200px;
+  max-height: 380px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 0.4rem;
+}
+.drive-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+}
+.drive-item:last-child {
+  border-bottom: none;
+}
+.drive-item:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+body.dark-theme .drive-item:hover {
+  background: rgba(59, 130, 246, 0.15);
+}
+.drive-item-main {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex: 1;
+  min-width: 0;
+}
+.drive-item-icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+.drive-item-text {
+  min-width: 0;
+}
+.drive-item-name {
+  font-size: 0.92rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.drive-item-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.drive-item-btn {
+  padding: 0.3rem 0.65rem;
+  font-size: 0.8rem;
+  border-radius: 4px;
+}
+.drive-loading {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+.drive-empty {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: var(--text-muted);
+}

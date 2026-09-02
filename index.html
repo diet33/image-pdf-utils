@@ -538,18 +538,45 @@
     </section>
   </main>
 
-  <!-- 구글 드라이브 가져오기 모달 -->
+  <!-- 구글 드라이브 탐색기 모달 (아이폰 앱 화면과 동일한 내 드라이브 / 컴퓨터 구성) -->
   <div id="gdrive-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="gdrive-title">
-    <div class="modal-box">
+    <div class="modal-box drive-modal-box">
       <div class="modal-header">
-        <h3 id="gdrive-title">☁️ 구글 드라이브에서 사진 가져오기</h3>
+        <h3 id="gdrive-title">☁️ 구글 드라이브</h3>
         <button type="button" class="modal-close" id="gdrive-modal-close" aria-label="닫기">✕</button>
       </div>
-      <div class="modal-body">
-        <p class="desc" style="margin-bottom: 0.75rem;">두 가지 방법으로 구글 드라이브 사진을 갤러리에 추가할 수 있습니다.</p>
 
-        <div class="gdrive-method">
-          <h4>방법 1: 구글 드라이브 공유 링크로 즉시 가져오기 (가장 쉬움)</h4>
+      <!-- 상단 네비게이션: 아이폰 구글드라이브 앱과 동일한 탭! -->
+      <div class="drive-tab-bar">
+        <button type="button" class="drive-nav-tab active" data-drive-tab="mydrive">내 드라이브</button>
+        <button type="button" class="drive-nav-tab" data-drive-tab="computers">💻 컴퓨터</button>
+        <button type="button" class="drive-nav-tab" data-drive-tab="share-link">🔗 공유 링크</button>
+        <button type="button" class="drive-nav-tab" data-drive-tab="config">⚙️ API 설정</button>
+      </div>
+
+      <div class="modal-body" style="padding-top: 0.25rem;">
+        <!-- 패널 1: 내 드라이브 / 컴퓨터 탐색기 뷰 -->
+        <div id="gdrive-explorer-panel">
+          <p id="gdrive-panel-hint" class="hint" style="margin-bottom: 0.5rem; display: none;">파일의 변경사항은 Google Drive와 컴퓨터 간에 자동으로 동기화됩니다.</p>
+          
+          <div class="drive-toolbar">
+            <div class="drive-breadcrumb" id="drive-breadcrumb">
+              <span class="drive-breadcrumb-item" data-id="root">내 드라이브</span>
+            </div>
+            <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+              <button type="button" class="btn btn-secondary btn-compact" id="drive-up-btn">⬆️ 상위</button>
+              <button type="button" class="btn btn-primary btn-compact" id="drive-fetch-all-btn">📥 이 폴더 전체 사진 가져오기</button>
+            </div>
+          </div>
+
+          <div class="drive-list-wrap" id="drive-file-list">
+            <div class="drive-loading">구글 드라이브 목록을 불러오는 중...</div>
+          </div>
+        </div>
+
+        <!-- 패널 2: 공유 링크 가져오기 -->
+        <div id="gdrive-link-panel" class="hidden">
+          <h4>구글 드라이브 공유 링크로 즉시 가져오기</h4>
           <p class="hint">Google Drive에서 사진 우클릭 → <em>공유</em> → <em>링크가 있는 모든 사용자에게 공개</em> 후 링크 복사</p>
           <div class="gdrive-link-input-group">
             <input type="url" id="gdrive-share-url" placeholder="https://drive.google.com/file/d/.../view?usp=sharing" class="input-text">
@@ -558,11 +585,10 @@
           <div id="gdrive-link-status" class="status"></div>
         </div>
 
-        <hr style="margin: 1.25rem 0; border: none; border-top: 1px solid var(--border);">
-
-        <div class="gdrive-method">
-          <h4>방법 2: Google Picker (내 드라이브 직접 탐색기)</h4>
-          <p class="hint">Google Cloud의 Client ID와 API Key를 <strong>처음 한 번만 입력</strong>하면 브라우저에 자동 기억되어 다음부터는 이 창 없이 <strong>즉시 내 드라이브 파일 탐색기가 열립니다.</strong></p>
+        <!-- 패널 3: API 키 설정 -->
+        <div id="gdrive-config-panel" class="hidden">
+          <h4>Google Client ID & API Key 설정</h4>
+          <p class="hint">Google Cloud 프로젝트의 Client ID와 API Key를 입력하세요. 한 번 저장하면 자동으로 기억됩니다.</p>
           <div class="gdrive-config-form">
             <label>Google Client ID:
               <input type="text" id="gdrive-client-id" placeholder="예: xxxxx.apps.googleusercontent.com" class="input-text">
@@ -571,7 +597,7 @@
               <input type="text" id="gdrive-api-key" placeholder="예: AIzaSy..." class="input-text">
             </label>
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-              <button type="button" class="btn btn-info" id="gdrive-picker-btn" style="flex: 1;">저장하고 파일 탐색기 열기</button>
+              <button type="button" class="btn btn-info" id="gdrive-picker-btn" style="flex: 1;">저장하고 연결하기</button>
               <button type="button" class="btn btn-secondary" id="gdrive-clear-btn" style="padding: 0.5rem 0.8rem;">설정 키 삭제</button>
             </div>
           </div>
