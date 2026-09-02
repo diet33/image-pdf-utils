@@ -306,7 +306,7 @@ function createResultCard(title, meta, blob, downloadName, single) {
 
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'btn btn-primary btn-compact';
+  btn.className = 'btn btn-primary btn-compact btn-download';
   btn.textContent = '저장 / 공유';
   btn.addEventListener('click', function () {
     downloadBlob(blob, downloadName);
@@ -332,7 +332,7 @@ function renderResults(tabId, items) {
 
 function createPreviewCard(title, imageSrc, meta) {
   const card = document.createElement('div');
-  card.className = 'preview-card';
+  card.className = 'preview-card result-card';
   const imgWrap = document.createElement('div');
   imgWrap.className = 'result-img-wrap';
   const img = document.createElement('img');

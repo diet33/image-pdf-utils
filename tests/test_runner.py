@@ -27,7 +27,7 @@ def ok(name):
 def fail(name, detail=""):
     global failed
     failed += 1
-    msg = f"  FAIL  {name}" + (f" — {detail}" if detail else "")
+    msg = f"  FAIL  {name}" + (f" - {detail}" if detail else "")
     print(msg)
     errors.append(msg)
 
@@ -271,14 +271,58 @@ def test_playwright_browser():
             ok("opencv: loaded")
 
             page.set_input_files("#scan-input", str(ASSETS / "test_image.png"))
-            page.wait_for_timeout(300)
+            page.wait_for_selector("#scan-corner-wrap:not(.hidden)", timeout=15000)
             page.click("#scan-run")
-            page.wait_for_selector("#scan-results .result-card", timeout=120000)
+            page.wait_for_selector("#scan-results .result-card", timeout=30000)
             cards = page.locator("#scan-results .result-card").count()
             if cards >= 2:
                 ok(f"scan: {cards} preview cards (original + result)")
             else:
                 fail("scan: expected 2 cards", f"got {cards}")
+
+            # 신규 기능 1: 이미지 -> PDF
+            page.click('button[data-tab="img-pdf"]')
+            page.set_input_files("#img-pdf-input", [
+                str(ASSETS / "merge_1.png"),
+                str(ASSETS / "merge_2.png"),
+            ])
+            page.wait_for_selector("#img-pdf-reorder-wrap:not(.hidden)", timeout=10000)
+            page.click("#img-pdf-run")
+            page.wait_for_selector("#img-pdf-results .result-card", timeout=30000)
+            ok("img-pdf: multi-page PDF generated")
+
+            # 신규 기능 2: 포맷 변환 및 압축
+            page.click('button[data-tab="convert"]')
+            page.set_input_files("#convert-input", str(ASSETS / "test_image.png"))
+            page.wait_for_timeout(300)
+            page.click("#convert-run")
+            page.wait_for_selector("#convert-results .result-card", timeout=30000)
+            ok("convert: format conversion and compression completed")
+
+            # 신규 기능 3: 갤러리 파일 로드 및 슬라이드쇼
+            page.click('button[data-tab="gallery"]')
+            page.set_input_files("#gallery-input", [
+                str(ASSETS / "merge_1.png"),
+                str(ASSETS / "merge_2.png"),
+            ])
+            page.wait_for_selector("#gallery-grid .gallery-thumb", timeout=10000)
+            thumbs = page.locator("#gallery-grid .gallery-thumb").count()
+            if thumbs >= 2:
+                ok(f"gallery: {thumbs} thumbnails displayed")
+            else:
+                fail("gallery: thumbnail count", f"got {thumbs}")
+
+            page.click("#gallery-slideshow-btn")
+            page.wait_for_selector("#gallery-viewer:not(.hidden)", timeout=5000)
+            ok("gallery: fullscreen slideshow viewer opened")
+            page.click("#gallery-viewer-close")
+
+            # 신규 기능 4: 간단 이미지 편집
+            page.click('button[data-tab="edit"]')
+            page.set_input_files("#edit-input", str(ASSETS / "test_image.png"))
+            page.wait_for_selector("#edit-workspace:not(.hidden)", timeout=10000)
+            page.click("#edit-rot-cw")
+            ok("edit: 90 deg rotation applied")
 
         except Exception as e:
             fail("playwright run", str(e))
