@@ -46,6 +46,7 @@ def test_static_files():
         ("/index.html", "text/html"),
         ("/style.css", "text/css"),
         ("/app.js", "text/javascript"),
+        ("/sw.js", "text/javascript"),
         ("/manifest.json", "application/json"),
         ("/icon.svg", "image/svg+xml"),
         ("/.nojekyll", "text/plain"),
@@ -79,17 +80,23 @@ def test_html_structure():
     text = html.decode("utf-8", errors="replace")
     checks = [
         ("title", "올인원 이미지/PDF 유틸리티"),
+        ("tab gallery", 'id="gallery"'),
         ("tab pdf-jpg", 'id="pdf-jpg"'),
+        ("tab img-pdf", 'id="img-pdf"'),
         ("tab resize", 'id="resize"'),
+        ("tab convert", 'id="convert"'),
         ("tab upscale", 'id="upscale"'),
         ("tab merge", 'id="merge"'),
+        ("tab edit", 'id="edit"'),
         ("tab scan", 'id="scan"'),
         ("pdf.js cdn", "pdf.min.js"),
         ("jszip cdn", "jszip"),
         ("pica cdn", "pica"),
+        ("jspdf cdn", "jspdf"),
+        ("cropper cdn", "cropper"),
         ("opencv cdn", "opencv.js"),
-        ("ios tip", "ios-tip"),
-        ("scan camera", "scan-camera-btn"),
+        ("scan corner canvas", "scan-canvas"),
+        ("gdrive modal", "gdrive-modal"),
         ("manifest", "manifest.json"),
     ]
     for name, needle in checks:
@@ -104,7 +111,8 @@ def test_app_js():
     _, js, _ = fetch("/app.js")
     text = js.decode("utf-8", errors="replace")
     funcs = [
-        "initPdfJpg", "initResize", "initUpscale", "initMerge", "initScan",
+        "initGallery", "initPdfJpg", "initImgPdf", "initResize", "initConvert",
+        "initUpscale", "initMerge", "initEditor", "initScan",
         "findDocumentCorners", "downloadBlob", "applyDeviceLimits", "isIOS",
         "yieldToMain", "downloadZip",
     ]
@@ -191,11 +199,15 @@ def test_playwright_browser():
 
             # 탭 전환
             for tab, panel in [
+                ("gallery", "사진 보기"),
                 ("resize", "이미지 사이즈 줄이기"),
                 ("upscale", "이미지 2배 확대"),
-                ("merge", "이미지 세로 합치기"),
+                ("merge", "이미지 합치기"),
                 ("scan", "문서 스캔 보정"),
                 ("pdf-jpg", "PDF → JPG"),
+                ("img-pdf", "이미지 → PDF"),
+                ("convert", "포맷 변환"),
+                ("edit", "간단 이미지 편집"),
             ]:
                 page.click(f'button[data-tab="{tab}"]')
                 page.wait_for_timeout(200)
