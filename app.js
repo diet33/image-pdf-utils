@@ -1007,43 +1007,38 @@ function initGoogleDriveModal(onAddFiles) {
     }
   }
 
-  function renderBreadcrumb() {
-    breadcrumbEl.innerHTML = '';
-    gdriveState.pathHistory.forEach(function (item, index) {
-      if (index > 0) {
-        const sep = document.createElement('span');
-        sep.className = 'drive-breadcrumb-separator';
-        sep.textContent = '>';
-        breadcrumbEl.appendChild(sep);
-      }
-      const span = document.createElement('span');
-      span.className = 'drive-breadcrumb-item';
-      span.textContent = item.name;
-      span.addEventListener('click', function () {
-        if (index === gdriveState.pathHistory.length - 1) return;
-        gdriveState.pathHistory = gdriveState.pathHistory.slice(0, index + 1);
-        if (item.id === '__computers__') {
-          loadComputersRoot();
-        } else {
-          loadDriveFolder(item.id, item.name);
-        }
-      });
-      breadcrumbEl.appendChild(span);
-    });
+  function updateIOSNav() {
+    const backLabel = document.getElementById('drive-back-label');
+    const currentTitle = document.getElementById('drive-current-title');
+
+    if (currentTitle) {
+      currentTitle.textContent = gdriveState.currentFolderName || '드라이브';
+    }
+
+    if (gdriveState.pathHistory.length <= 1) {
+      upBtn.disabled = true;
+      upBtn.classList.add('disabled');
+      if (backLabel) backLabel.textContent = '뒤로';
+    } else {
+      upBtn.disabled = false;
+      upBtn.classList.remove('disabled');
+      const prev = gdriveState.pathHistory[gdriveState.pathHistory.length - 2];
+      if (backLabel) backLabel.textContent = prev.name;
+    }
   }
 
   // 일반 폴더 로드
   async function loadDriveFolder(folderId, folderName) {
     gdriveState.currentFolderId = folderId;
     gdriveState.currentFolderName = folderName;
-    renderBreadcrumb();
+    updateIOSNav();
 
     fileListEl.innerHTML = '<div class="drive-loading">폴더 목록을 불러오는 중...</div>';
 
     try {
       const q = encodeURIComponent("'" + folderId + "' in parents and trashed = false");
-      const fields = encodeURIComponent("files(id, name, mimeType, size, modifiedTime)");
-      const url = "https://www.googleapis.com/drive/v3/files?q=" + q + "&fields=" + fields + "&orderBy=folder,name&pageSize=1000";
+      const fields = encodeURIComponent("files(id, name, mimeType, size, modifiedTime, thumbnailLink, fileExtension)");
+      const url = "https://www.googleapis.com/drive/v3/files?q=" + q + "&fields=" + fields + "&orderBy=folder,name_natural&pageSize=1000&includeItemsFromAllDrives=true&supportsAllDrives=true";
 
       const res = await fetch(url, {
         headers: { Authorization: "Bearer " + gdriveState.token }
@@ -1066,15 +1061,14 @@ function initGoogleDriveModal(onAddFiles) {
   async function loadComputersRoot() {
     gdriveState.currentFolderId = '__computers__';
     gdriveState.currentFolderName = '컴퓨터';
-    renderBreadcrumb();
+    updateIOSNav();
 
     fileListEl.innerHTML = '<div class="drive-loading">동기화된 컴퓨터 장치 검색 중...</div>';
 
     try {
-      // 1) 전체 폴더 검색 중 컴퓨터 관련 또는 최상위 폴더 탐색
       const q = encodeURIComponent("trashed = false and mimeType = 'application/vnd.google-apps.folder'");
       const fields = encodeURIComponent("files(id, name, parents, modifiedTime)");
-      const url = "https://www.googleapis.com/drive/v3/files?q=" + q + "&fields=" + fields + "&pageSize=100";
+      const url = "https://www.googleapis.com/drive/v3/files?q=" + q + "&fields=" + fields + "&pageSize=100&includeItemsFromAllDrives=true&supportsAllDrives=true";
 
       const res = await fetch(url, {
         headers: { Authorization: "Bearer " + gdriveState.token }
@@ -1085,22 +1079,20 @@ function initGoogleDriveModal(onAddFiles) {
         const data = await res.json();
         const allFolders = data.files || [];
 
-        // '내 컴퓨터', '컴퓨터', 'Computer' 가 포함된 폴더 또는 부모가 root가 아닌 특수 폴더 필터링
         allFolders.forEach(function (f) {
-          const isComputerName = /내\s*컴퓨터|computer|laptop|pc/i.test(f.name);
+          const isComputerName = /내\s*컴퓨터|computer|laptop|pc|desktop/i.test(f.name);
           const isNonRootParent = f.parents && !f.parents.includes('root');
           if (isComputerName || isNonRootParent) {
             items.push(f);
           }
         });
 
-        // 만약 필터링된 게 없더라도 전체 폴더 리스트 제공
         if (items.length === 0 && allFolders.length > 0) {
-          allFolders.slice(0, 10).forEach(function (f) { items.push(f); });
+          allFolders.slice(0, 15).forEach(function (f) { items.push(f); });
         }
       }
 
-      // 항상 아이폰 화면처럼 '💻 내 컴퓨터' 기본 진입 항목 보장
+      // 항상 '💻 내 컴퓨터' 기본 진입 항목 보장
       if (items.length === 0) {
         items.push({
           id: 'root',
@@ -1124,7 +1116,11 @@ function initGoogleDriveModal(onAddFiles) {
     }
 
     items.forEach(function (item) {
-      const isFolder = item.mimeType === 'application/vnd.google-apps.folder' || item.isDefaultPc;
+      const isFolder = item.mimeType === 'application/vnd.google-apps.folder' ||
+                       item.mimeType === 'application/vnd.google-apps.shortcut' ||
+                       item.isDefaultPc ||
+                       (!item.size && !item.fileExtension && !item.thumbnailLink);
+
       const isImage = !isFolder && (
         (item.mimeType && item.mimeType.startsWith('image/')) ||
         /\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i.test(item.name)
@@ -1136,18 +1132,27 @@ function initGoogleDriveModal(onAddFiles) {
       const mainDiv = document.createElement('div');
       mainDiv.className = 'drive-item-main';
 
-      const iconSpan = document.createElement('span');
-      iconSpan.className = 'drive-item-icon';
-      if (isComputersView || item.isDefaultPc || /컴퓨터|computer/i.test(item.name)) {
-        iconSpan.textContent = '💻';
-      } else if (isFolder) {
-        iconSpan.textContent = '📁';
-      } else if (isImage) {
-        iconSpan.textContent = '🖼️';
+      if (isImage && item.thumbnailLink) {
+        const thumbImg = document.createElement('img');
+        thumbImg.src = item.thumbnailLink;
+        thumbImg.alt = '';
+        thumbImg.className = 'drive-thumb-preview';
+        thumbImg.loading = 'lazy';
+        mainDiv.appendChild(thumbImg);
       } else {
-        iconSpan.textContent = '📄';
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'drive-item-icon';
+        if (isComputersView || item.isDefaultPc || /컴퓨터|computer/i.test(item.name)) {
+          iconSpan.textContent = '💻';
+        } else if (isFolder) {
+          iconSpan.textContent = '📁';
+        } else if (isImage) {
+          iconSpan.textContent = '🖼️';
+        } else {
+          iconSpan.textContent = '📄';
+        }
+        mainDiv.appendChild(iconSpan);
       }
-      mainDiv.appendChild(iconSpan);
 
       const textDiv = document.createElement('div');
       textDiv.className = 'drive-item-text';
@@ -1159,9 +1164,21 @@ function initGoogleDriveModal(onAddFiles) {
 
       const metaDiv = document.createElement('div');
       metaDiv.className = 'drive-item-meta';
-      let metaText = isFolder ? '폴더' : formatSize(item.size || 0);
-      if (item.modifiedTime) {
-        metaText += ' · ' + new Date(item.modifiedTime).toLocaleDateString();
+
+      // 폴더 크기 0 표시 버그 완전 해결: 폴더는 절대 0으로 표시하지 않음
+      let metaText = '';
+      if (isFolder) {
+        metaText = '폴더';
+        if (item.modifiedTime) {
+          const d = new Date(item.modifiedTime);
+          metaText += ' · ' + (d.getMonth() + 1) + '월 ' + d.getDate() + '일';
+        }
+      } else {
+        metaText = item.size ? formatSize(item.size) : '이미지';
+        if (item.modifiedTime) {
+          const d = new Date(item.modifiedTime);
+          metaText += ' · ' + (d.getMonth() + 1) + '월 ' + d.getDate() + '일';
+        }
       }
       metaDiv.textContent = metaText;
       textDiv.appendChild(metaDiv);
@@ -1169,26 +1186,22 @@ function initGoogleDriveModal(onAddFiles) {
       mainDiv.appendChild(textDiv);
       div.appendChild(mainDiv);
 
-      // 폴더 클릭 시 진입
+      // 폴더 클릭 시 진입 (아이폰 파일앱 스타일)
       if (isFolder) {
-        div.addEventListener('click', function () {
+        const chevron = document.createElement('span');
+        chevron.className = 'drive-item-chevron';
+        chevron.textContent = '›';
+        div.appendChild(chevron);
+
+        function handleFolderEnter(e) {
+          if (e && e.type === 'touchend') e.preventDefault();
           gdriveState.pathHistory.push({ id: item.id, name: item.name });
           loadDriveFolder(item.id, item.name);
-        });
+        }
 
-        // 개별 폴더 가져오기 버튼
-        const fetchBtn = document.createElement('button');
-        fetchBtn.type = 'button';
-        fetchBtn.className = 'btn btn-secondary btn-compact drive-item-btn';
-        fetchBtn.textContent = '가져오기';
-        fetchBtn.title = '이 폴더와 하위 서브폴더의 사진 전체 가져오기';
-        fetchBtn.addEventListener('click', function (e) {
-          e.stopPropagation();
-          startDownloadFromFolder(item.id, item.name);
-        });
-        div.appendChild(fetchBtn);
+        div.addEventListener('click', handleFolderEnter);
+        div.addEventListener('touchend', handleFolderEnter);
       } else if (isImage) {
-        // 단일 이미지 클릭 시 가져오기
         const getBtn = document.createElement('button');
         getBtn.type = 'button';
         getBtn.className = 'btn btn-primary btn-compact drive-item-btn';
@@ -1219,8 +1232,9 @@ function initGoogleDriveModal(onAddFiles) {
     });
   }
 
-  // 상위 폴더로 이동
-  upBtn.addEventListener('click', function () {
+  // 상위 폴더로 이동 (뒤로가기)
+  function handleGoUp(e) {
+    if (e && e.type === 'touchend') e.preventDefault();
     if (gdriveState.pathHistory.length > 1) {
       gdriveState.pathHistory.pop();
       const parent = gdriveState.pathHistory[gdriveState.pathHistory.length - 1];
@@ -1230,7 +1244,10 @@ function initGoogleDriveModal(onAddFiles) {
         loadDriveFolder(parent.id, parent.name);
       }
     }
-  });
+  }
+
+  upBtn.addEventListener('click', handleGoUp);
+  upBtn.addEventListener('touchend', handleGoUp);
 
   // 현재 폴더 및 하위 서브폴더 전체 사진 일괄 가져오기
   async function startDownloadFromFolder(folderId, folderName) {

@@ -1496,3 +1496,68 @@ body.dark-theme .drive-item:hover {
   padding: 2.5rem 1rem;
   color: var(--text-muted);
 }
+
+/* ─── iOS Files App Style Navigation ─── */
+.ios-files-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.25rem 0.65rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.5rem;
+}
+.ios-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  max-width: 130px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+.ios-back-btn:disabled, .ios-back-btn.disabled {
+  visibility: hidden;
+  pointer-events: none;
+}
+.ios-back-arrow {
+  font-size: 1.5rem;
+  line-height: 1;
+  font-weight: 300;
+  margin-top: -2px;
+}
+.ios-nav-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  flex: 1;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 0.25rem;
+}
+.drive-item-chevron {
+  color: #94a3b8;
+  font-size: 1.25rem;
+  font-weight: 300;
+  margin-left: 0.5rem;
+  flex-shrink: 0;
+}
+.drive-thumb-preview {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+  background: rgba(0,0,0,0.05);
+}

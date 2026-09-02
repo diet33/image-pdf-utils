@@ -559,19 +559,19 @@
           📱 <strong>아이폰 꿀팁</strong>: 메인 화면의 첫 번째 <em>「📁 파일 선택」</em> 버튼을 누른 뒤, iOS 파일 창 왼쪽 상단 <strong>'위치'</strong>에서 <strong>[Google Drive]</strong> 앱을 선택하셔도 사진을 즉시 불러올 수 있습니다!
         </div>
 
-        <!-- 패널 1: 내 드라이브 / 컴퓨터 탐색기 뷰 -->
+        <!-- 패널 1: 내 드라이브 / 컴퓨터 탐색기 뷰 (아이폰 파일앱과 동일한 네비게이션) -->
         <div id="gdrive-explorer-panel">
           <p id="gdrive-panel-hint" class="hint" style="margin-bottom: 0.5rem; display: none;">파일의 변경사항은 Google Drive와 컴퓨터 간에 자동으로 동기화됩니다.</p>
           
-          <div class="drive-toolbar">
-            <div class="drive-breadcrumb" id="drive-breadcrumb">
-              <span class="drive-breadcrumb-item" data-id="root">내 드라이브</span>
-            </div>
-            <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
-              <button type="button" class="btn btn-secondary btn-compact" id="drive-up-btn">⬆️ 상위</button>
-              <button type="button" class="btn btn-primary btn-compact" id="drive-fetch-all-btn">📥 이 폴더 전체 사진 가져오기</button>
-            </div>
+          <div class="ios-files-nav">
+            <button type="button" class="ios-back-btn" id="drive-up-btn">
+              <span class="ios-back-arrow">‹</span> <span id="drive-back-label">뒤로</span>
+            </button>
+            <div class="ios-nav-title" id="drive-current-title">내 드라이브</div>
+            <button type="button" class="btn btn-primary btn-compact" id="drive-fetch-all-btn">📥 사진 전체 가져오기</button>
           </div>
+
+          <div class="drive-breadcrumb" id="drive-breadcrumb" style="display: none;"></div>
 
           <div class="drive-list-wrap" id="drive-file-list">
             <div class="drive-loading">구글 드라이브 목록을 불러오는 중...</div>
