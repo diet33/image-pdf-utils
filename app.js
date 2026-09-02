@@ -948,14 +948,15 @@ function initGoogleDriveModal(onAddFiles) {
     if (savedApiKey) document.getElementById('gdrive-api-key').value = savedApiKey;
   }
 
+  const DEFAULT_GDRIVE_CLIENT_ID = '20291656125-pbgc618j3ab20r6nkj129rq4uv00qpbf.apps.googleusercontent.com';
+
   function getSavedClientId() {
-    return localStorage.getItem('gdrive_client_id') || '';
+    return localStorage.getItem('gdrive_client_id') || DEFAULT_GDRIVE_CLIENT_ID;
   }
 
   function requireTokenAndLoad(onSuccess) {
     const clientId = getSavedClientId();
     if (!clientId) {
-      alert('구글 드라이브를 탐색하려면 먼저 Client ID를 등록해 주세요.');
       switchDriveTab('config');
       return;
     }
@@ -967,27 +968,43 @@ function initGoogleDriveModal(onAddFiles) {
     }
 
     if (typeof google === 'undefined' || !google.accounts) {
-      fileListEl.innerHTML = '<div class="drive-empty">Google API 클라이언트가 로드되지 않았습니다. 인터넷 연결을 확인해 주세요.</div>';
+      fileListEl.innerHTML = '<div class="drive-empty">Google API 클라이언트를 로딩 중입니다. 잠시 후 다시 시도해 주세요.</div>';
       return;
     }
 
-    fileListEl.innerHTML = '<div class="drive-loading">구글 계정 인증 요청 중...</div>';
+    // 아이폰 Safari 팝업 차단 방지: 사용자가 직접 터치하여 로그인 창을 열도록 유도!
+    fileListEl.innerHTML =
+      '<div style="text-align: center; padding: 2.5rem 1rem;">' +
+        '<p style="font-size: 1rem; margin-bottom: 1rem; font-weight: 600;">구글 드라이브에 안전하게 연결합니다.</p>' +
+        '<button type="button" class="btn btn-primary" id="drive-connect-btn" style="padding: 0.8rem 1.6rem; font-size: 1.05rem;">' +
+          '🔐 Google 계정으로 로그인 & 드라이브 열기' +
+        '</button>' +
+        '<p class="hint" style="margin-top: 0.85rem;">아이폰에서는 팝업 차단을 방지하기 위해 터치 시 로그인 창이 열립니다.</p>' +
+      '</div>';
 
-    const tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: 'https://www.googleapis.com/auth/drive.readonly',
-      callback: function (response) {
-        if (response.error !== undefined) {
-          fileListEl.innerHTML = '<div class="drive-empty">인증 실패: ' + escapeHtml(response.error) + '<br><small>API 설정이나 구글 계정 권한을 확인해 주세요.</small></div>';
-          return;
-        }
-        gdriveState.token = response.access_token;
-        gdriveState.tokenExpiresAt = Date.now() + ((response.expires_in || 3600) - 120) * 1000;
-        onSuccess(gdriveState.token);
-      }
-    });
+    const connectBtn = document.getElementById('drive-connect-btn');
+    if (connectBtn) {
+      connectBtn.addEventListener('click', function () {
+        connectBtn.disabled = true;
+        connectBtn.textContent = '구글 로그인 창 여는 중...';
 
-    tokenClient.requestAccessToken({ prompt: '' });
+        const tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: 'https://www.googleapis.com/auth/drive.readonly',
+          callback: function (response) {
+            if (response.error !== undefined) {
+              fileListEl.innerHTML = '<div class="drive-empty">인증 실패: ' + escapeHtml(response.error) + '<br><small>API 설정이나 구글 계정 권한을 확인해 주세요.</small></div>';
+              return;
+            }
+            gdriveState.token = response.access_token;
+            gdriveState.tokenExpiresAt = Date.now() + ((response.expires_in || 3600) - 120) * 1000;
+            onSuccess(gdriveState.token);
+          }
+        });
+
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+      });
+    }
   }
 
   function renderBreadcrumb() {
@@ -1274,34 +1291,37 @@ function initGoogleDriveModal(onAddFiles) {
     startDownloadFromFolder(gdriveState.currentFolderId, gdriveState.currentFolderName);
   });
 
-  // 메인 '☁️ 구글 드라이브' 버튼 클릭 시 모달 열기
-  openBtn.addEventListener('click', function () {
+  function handleOpenDriveModal(e) {
+    if (e && e.type === 'touchend') e.preventDefault();
     modal.classList.remove('hidden');
-    const clientId = getSavedClientId();
-    if (clientId) {
-      switchDriveTab('mydrive');
-    } else {
-      switchDriveTab('config');
-    }
-  });
+    document.body.classList.add('modal-open');
+    switchDriveTab('computers');
+  }
+
+  // 메인 '☁️ 구글 드라이브' 버튼: 클릭 & 터치 모두 완벽 지원
+  openBtn.addEventListener('click', handleOpenDriveModal);
+  openBtn.addEventListener('touchend', handleOpenDriveModal);
 
   // '⚙️ 드라이브 키 설정' 버튼 클릭 시
   if (configBtn) {
     configBtn.addEventListener('click', function () {
       modal.classList.remove('hidden');
+      document.body.classList.add('modal-open');
       switchDriveTab('config');
     });
   }
 
-  closeBtn.addEventListener('click', function () {
+  function handleCloseDriveModal() {
     modal.classList.add('hidden');
+    document.body.classList.remove('modal-open');
     linkStatus.textContent = '';
-  });
+  }
+
+  closeBtn.addEventListener('click', handleCloseDriveModal);
 
   modal.addEventListener('click', function (e) {
     if (e.target === modal) {
-      modal.classList.add('hidden');
-      linkStatus.textContent = '';
+      handleCloseDriveModal();
     }
   });
 

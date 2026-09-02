@@ -1,5 +1,5 @@
 // Service Worker for 올인원 이미지/PDF 유틸리티
-const CACHE_NAME = 'image-pdf-utils-v2';
+const CACHE_NAME = 'image-pdf-utils-v3';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -7,15 +7,7 @@ const ASSETS_TO_CACHE = [
   './style.css',
   './app.js',
   './manifest.json',
-  './icon.svg',
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js',
-  'https://cdn.jsdelivr.net/npm/pica@9.0.1/dist/pica.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css',
-  'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js'
+  './icon.svg'
 ];
 
 self.addEventListener('install', (event) => {
@@ -44,37 +36,20 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   // Google API 등 동적 요청은 캐시 제외
-  if (event.request.url.includes('google') || event.request.method !== 'GET') {
+  if (event.request.url.includes('google') || event.request.url.includes('gstatic') || event.request.method !== 'GET') {
     return;
   }
 
+  // Network First for HTML and JS to ensure latest updates on mobile devices
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // 백그라운드에서 캐시 갱신 (stale-while-revalidate)
-        fetch(event.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, networkResponse);
-            });
-          }
-        }).catch(() => {});
-        return cachedResponse;
-      }
-      return fetch(event.request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200 && event.request.url.startsWith('http')) {
-          const responseClone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone);
-          });
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const resClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, resClone));
         }
         return networkResponse;
-      }).catch(() => {
-        // 오프라인 폴백
-        if (event.request.mode === 'navigate') {
-          return caches.match('./index.html');
-        }
-      });
-    })
+      })
+      .catch(() => caches.match(event.request))
   );
 });
