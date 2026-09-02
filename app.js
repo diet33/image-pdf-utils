@@ -1005,7 +1005,7 @@ async function fetchFolderFilesRecursively(folderId, token, progressCallback) {
 
 function initGoogleDriveModal(onAddFiles) {
   const modal = document.getElementById('gdrive-modal');
-  const openBtn = document.getElementById('gallery-gdrive-config-btn') || document.getElementById('gallery-gdrive-btn');
+  const openBtn = document.getElementById('gallery-gdrive-btn') || document.getElementById('gallery-gdrive-config-btn');
   const configBtn = document.getElementById('gallery-gdrive-config-btn');
   const closeBtn = document.getElementById('gdrive-modal-close');
   const fetchBtn = document.getElementById('gdrive-fetch-btn');
@@ -1443,19 +1443,19 @@ function initGoogleDriveModal(onAddFiles) {
     startDownloadFromFolder(gdriveState.currentFolderId, gdriveState.currentFolderName);
   });
 
-  function handleOpenDriveModal(e) {
-    if (e && e.type === 'touchend') e.preventDefault();
+  function handleOpenDriveModal() {
     modal.classList.remove('hidden');
     document.body.classList.add('modal-open');
     switchDriveTab('computers');
   }
 
-  // 메인 '☁️ 구글 드라이브' 버튼: 클릭 & 터치 모두 완벽 지원
-  openBtn.addEventListener('click', handleOpenDriveModal);
-  openBtn.addEventListener('touchend', handleOpenDriveModal);
+  // 메인 '☁️ 구글 드라이브 탐색 및 설정' 버튼
+  if (openBtn) {
+    openBtn.addEventListener('click', handleOpenDriveModal);
+  }
 
-  // '⚙️ 드라이브 키 설정' 버튼 클릭 시
-  if (configBtn) {
+  // 별도의 설정 버튼이 존재하고 openBtn과 다를 때만 바인딩
+  if (configBtn && configBtn !== openBtn) {
     configBtn.addEventListener('click', function () {
       modal.classList.remove('hidden');
       document.body.classList.add('modal-open');
