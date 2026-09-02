@@ -9,7 +9,7 @@ let WARN_MERGE_PIXELS = 50_000_000;
 let MAX_UPSCALE_INPUT_SIDE = 4096;
 let PDF_RENDER_SCALE = 2.0;
 let SCAN_MAX_SIDE = 3000;
-let MAX_GALLERY_PHOTOS = 5000;
+let MAX_GALLERY_PHOTOS = 10000;
 
 function isIOS() {
   return (
@@ -31,7 +31,7 @@ function applyDeviceLimits() {
     WARN_MERGE_PIXELS = 20_000_000;
     PDF_RENDER_SCALE = 1.5;
     SCAN_MAX_SIDE = 2000;
-    MAX_GALLERY_PHOTOS = 3000;
+    MAX_GALLERY_PHOTOS = 10000;
     document.body.classList.add('is-ios');
   }
   if (isMobile()) {
@@ -965,17 +965,30 @@ async function fetchFolderFilesRecursively(folderId, token, progressCallback) {
   do {
     const q = encodeURIComponent("'" + folderId + "' in parents and trashed = false");
     const fields = encodeURIComponent("nextPageToken, files(id, name, mimeType, size)");
-    let url = "https://www.googleapis.com/drive/v3/files?q=" + q + "&fields=" + fields + "&pageSize=1000";
-    if (pageToken) url += "&pageToken=" + pageToken;
+    let url = "https://www.googleapis.com/drive/v3/files?q=" + q +
+              "&fields=" + fields +
+              "&pageSize=1000" +
+              "&includeItemsFromAllDrives=true" +
+              "&supportsAllDrives=true";
+    if (pageToken) url += "&pageToken=" + encodeURIComponent(pageToken);
 
     try {
-      const res = await fetch(url, {
+      let res = await fetch(url, {
         headers: { Authorization: "Bearer " + token }
       });
+
+      if (res.status === 429 || res.status >= 500) {
+        await new Promise(function (resolve) { setTimeout(resolve, 1000); });
+        res = await fetch(url, {
+          headers: { Authorization: "Bearer " + token }
+        });
+      }
+
       if (!res.ok) {
-        console.warn("Folder query failed for id:", folderId);
+        console.warn("Folder query failed for id:", folderId, res.status);
         break;
       }
+
       const data = await res.json();
       pageToken = data.nextPageToken;
 
@@ -983,7 +996,7 @@ async function fetchFolderFilesRecursively(folderId, token, progressCallback) {
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
         if (f.mimeType === "application/vnd.google-apps.folder") {
-          if (progressCallback) progressCallback("서브폴더 탐색 중: " + f.name);
+          if (progressCallback) progressCallback("하위 서브폴더 검색 중: " + f.name + " (" + allImages.length + "장 발견)");
           await yieldToMain();
           const subImages = await fetchFolderFilesRecursively(f.id, token, progressCallback);
           allImages = allImages.concat(subImages);
@@ -994,6 +1007,11 @@ async function fetchFolderFilesRecursively(folderId, token, progressCallback) {
           allImages.push(f);
         }
       }
+
+      if (progressCallback) {
+        progressCallback("폴더 목록 검색 중... 현재 " + allImages.length + "장의 사진 발견");
+      }
+      await yieldToMain();
     } catch (e) {
       console.error("Recursive fetch error:", e);
       break;
