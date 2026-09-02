@@ -9,7 +9,7 @@ let WARN_MERGE_PIXELS = 50_000_000;
 let MAX_UPSCALE_INPUT_SIDE = 4096;
 let PDF_RENDER_SCALE = 2.0;
 let SCAN_MAX_SIDE = 3000;
-let MAX_GALLERY_PHOTOS = 1000;
+let MAX_GALLERY_PHOTOS = 5000;
 
 function isIOS() {
   return (
@@ -31,7 +31,7 @@ function applyDeviceLimits() {
     WARN_MERGE_PIXELS = 20_000_000;
     PDF_RENDER_SCALE = 1.5;
     SCAN_MAX_SIDE = 2000;
-    MAX_GALLERY_PHOTOS = 300;
+    MAX_GALLERY_PHOTOS = 3000;
     document.body.classList.add('is-ios');
   }
   if (isMobile()) {
@@ -1404,23 +1404,39 @@ function initGoogleDriveModal(onAddFiles) {
         return;
       }
 
-      const maxDownload = Math.min(allImages.length, MAX_GALLERY_PHOTOS);
-      setStatus('gallery', '총 ' + allImages.length + '장의 사진을 다운로드하는 중... (0/' + maxDownload + ')', 'info');
+      const totalCount = allImages.length;
+      setStatus('gallery', '총 ' + totalCount + '장의 사진을 고속 다운로드하는 중... (0/' + totalCount + ')', 'info');
 
+      const CONCURRENCY = isIOS() ? 4 : 6;
       const downloaded = [];
-      for (let i = 0; i < maxDownload; i++) {
-        const item = allImages[i];
-        setStatus('gallery', '사진 다운로드 중 (' + (i + 1) + '/' + maxDownload + '): ' + item.name, 'info');
-        try {
-          const res = await fetch('https://www.googleapis.com/drive/v3/files/' + item.id + '?alt=media', {
-            headers: { Authorization: 'Bearer ' + gdriveState.token }
-          });
-          if (!res.ok) throw new Error('다운로드 실패');
-          const blob = await res.blob();
-          downloaded.push(new File([blob], item.name, { type: item.mimeType || 'image/jpeg' }));
-        } catch (e) {
-          console.error('File download error:', item.name, e);
-        }
+      let completedCount = 0;
+
+      for (let i = 0; i < totalCount; i += CONCURRENCY) {
+        const chunk = allImages.slice(i, i + CONCURRENCY);
+        const results = await Promise.all(
+          chunk.map(async function (item) {
+            try {
+              const res = await fetch('https://www.googleapis.com/drive/v3/files/' + item.id + '?alt=media', {
+                headers: { Authorization: 'Bearer ' + gdriveState.token }
+              });
+              if (!res.ok) throw new Error('다운로드 실패');
+              const blob = await res.blob();
+              completedCount++;
+              return new File([blob], item.name, { type: item.mimeType || 'image/png' });
+            } catch (e) {
+              console.error('File download error:', item.name, e);
+              return null;
+            }
+          })
+        );
+
+        results.forEach(function (file) {
+          if (file) downloaded.push(file);
+        });
+
+        const pct = Math.round((completedCount / totalCount) * 100);
+        setStatus('gallery', '사진 다운로드 중 (' + completedCount + '/' + totalCount + ') - ' + pct + '% 완료...', 'info');
+        await yieldToMain();
       }
 
       if (downloaded.length) {
