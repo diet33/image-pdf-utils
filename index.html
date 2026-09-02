@@ -56,6 +56,7 @@
         <button type="button" class="btn btn-secondary" id="gallery-folder-btn">📂 내 컴퓨터 폴더 통째로 열기</button>
         <button type="button" class="btn btn-info" id="gallery-gdrive-btn">☁️ 구글 드라이브 (내 드라이브)</button>
         <button type="button" class="btn btn-secondary" id="gallery-add-btn" disabled>➕ 사진 더 추가</button>
+        <button type="button" class="btn btn-secondary" id="gallery-gdrive-config-btn" title="구글 드라이브 키 설정 변경" style="font-size: 0.85rem;">⚙️ 드라이브 키 설정</button>
       </div>
 
       <div class="drop-zone" data-drop="gallery">
@@ -561,7 +562,7 @@
 
         <div class="gdrive-method">
           <h4>방법 2: Google Picker (내 드라이브 직접 탐색기)</h4>
-          <p class="hint">Google Cloud 프로젝트의 Client ID와 API Key가 있다면 내 드라이브 파일 탐색기를 직접 열 수 있습니다.</p>
+          <p class="hint">Google Cloud의 Client ID와 API Key를 <strong>처음 한 번만 입력</strong>하면 브라우저에 자동 기억되어 다음부터는 이 창 없이 <strong>즉시 내 드라이브 파일 탐색기가 열립니다.</strong></p>
           <div class="gdrive-config-form">
             <label>Google Client ID:
               <input type="text" id="gdrive-client-id" placeholder="예: xxxxx.apps.googleusercontent.com" class="input-text">
@@ -569,7 +570,10 @@
             <label>Google API Key:
               <input type="text" id="gdrive-api-key" placeholder="예: AIzaSy..." class="input-text">
             </label>
-            <button type="button" class="btn btn-info" id="gdrive-picker-btn">내 드라이브 파일 탐색기 열기</button>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button type="button" class="btn btn-info" id="gdrive-picker-btn" style="flex: 1;">저장하고 파일 탐색기 열기</button>
+              <button type="button" class="btn btn-secondary" id="gdrive-clear-btn" style="padding: 0.5rem 0.8rem;">설정 키 삭제</button>
+            </div>
           </div>
         </div>
       </div>

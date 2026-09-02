@@ -821,23 +821,123 @@ function initGallery() {
   initGoogleDriveModal(addGalleryFiles);
 }
 
-// ─── Google Drive Modal Integration ────────────────────────────
+// ─── Google Drive Modal & Direct Picker Integration ───────────
+let gdriveAccessToken = null;
+let gdriveTokenExpiresAt = 0;
+
+function openGooglePicker(clientId, apiKey, onAddFiles) {
+  if (typeof google === 'undefined' || !google.accounts || typeof gapi === 'undefined') {
+    alert('Google API 클라이언트 라이브러리가 아직 로드되지 않았습니다. 잠시 후 다시 시도해 주세요.');
+    return;
+  }
+
+  function launchPicker(token) {
+    gapi.load('picker', function () {
+      const view = new google.picker.DocsView(google.picker.ViewId.DOCS_IMAGES);
+      view.setMimeTypes('image/png,image/jpeg,image/webp,image/gif,image/heic,image/bmp');
+
+      const picker = new google.picker.PickerBuilder()
+        .addView(view)
+        .setOAuthToken(token)
+        .setDeveloperKey(apiKey)
+        .setCallback(async function (data) {
+          if (data.action === google.picker.Action.PICKED) {
+            setLoading('gallery', true);
+            setStatus('gallery', '구글 드라이브에서 사진을 다운로드하는 중...', 'info');
+            const files = [];
+            for (let i = 0; i < data.docs.length; i++) {
+              const doc = data.docs[i];
+              try {
+                const res = await fetch(
+                  'https://www.googleapis.com/drive/v3/files/' + doc.id + '?alt=media',
+                  { headers: { Authorization: 'Bearer ' + token } }
+                );
+                if (!res.ok) throw new Error('다운로드 실패');
+                const blob = await res.blob();
+                files.push(new File([blob], doc.name, { type: doc.mimeType || 'image/jpeg' }));
+              } catch (e) {
+                console.error('File download error:', e);
+              }
+            }
+            setLoading('gallery', false);
+            if (files.length) {
+              onAddFiles(files, true);
+              setStatus('gallery', files.length + '장의 구글 드라이브 사진을 불러왔습니다!', 'success');
+            } else {
+              setStatus('gallery', '구글 드라이브 사진을 가져오지 못했습니다.', 'error');
+            }
+          }
+        })
+        .build();
+      picker.setVisible(true);
+    });
+  }
+
+  // 기존 유효 토큰이 있다면 바로 팝업 없이 피커 실행!
+  const now = Date.now();
+  if (gdriveAccessToken && now < gdriveTokenExpiresAt) {
+    launchPicker(gdriveAccessToken);
+    return;
+  }
+
+  // 새 토큰 요청 (이미 권한 허용한 경우 자동 승인)
+  const tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: clientId,
+    scope: 'https://www.googleapis.com/auth/drive.readonly',
+    callback: function (response) {
+      if (response.error !== undefined) {
+        alert('Google 로그인 인증 실패: ' + response.error + '\n설정 정보를 확인해 주세요.');
+        document.getElementById('gdrive-modal').classList.remove('hidden');
+        return;
+      }
+      gdriveAccessToken = response.access_token;
+      gdriveTokenExpiresAt = Date.now() + ((response.expires_in || 3600) - 100) * 1000;
+      launchPicker(gdriveAccessToken);
+    }
+  });
+
+  tokenClient.requestAccessToken({ prompt: '' });
+}
+
 function initGoogleDriveModal(onAddFiles) {
   const modal = document.getElementById('gdrive-modal');
   const openBtn = document.getElementById('gallery-gdrive-btn');
+  const configBtn = document.getElementById('gallery-gdrive-config-btn');
   const closeBtn = document.getElementById('gdrive-modal-close');
   const fetchBtn = document.getElementById('gdrive-fetch-btn');
   const urlInput = document.getElementById('gdrive-share-url');
   const linkStatus = document.getElementById('gdrive-link-status');
   const pickerBtn = document.getElementById('gdrive-picker-btn');
+  const clearBtn = document.getElementById('gdrive-clear-btn');
 
-  openBtn.addEventListener('click', function () {
-    modal.classList.remove('hidden');
+  function populateSavedKeys() {
     const savedClientId = localStorage.getItem('gdrive_client_id');
     const savedApiKey = localStorage.getItem('gdrive_api_key');
     if (savedClientId) document.getElementById('gdrive-client-id').value = savedClientId;
     if (savedApiKey) document.getElementById('gdrive-api-key').value = savedApiKey;
+  }
+
+  // 1) 구글 드라이브 메인 버튼: 이미 키가 저장되어 있으면 모달 없이 바로 내 드라이브 파일 탐색기 실행!
+  openBtn.addEventListener('click', function () {
+    const savedClientId = localStorage.getItem('gdrive_client_id');
+    const savedApiKey = localStorage.getItem('gdrive_api_key');
+
+    if (savedClientId && savedApiKey) {
+      openGooglePicker(savedClientId, savedApiKey, onAddFiles);
+    } else {
+      // 처음이라 키가 없으면 설정 모달 열기
+      populateSavedKeys();
+      modal.classList.remove('hidden');
+    }
   });
+
+  // 2) 설정 키 변경 버튼: 언제든 모달을 열어 키를 수정하거나 공유 링크 사용 가능
+  if (configBtn) {
+    configBtn.addEventListener('click', function () {
+      populateSavedKeys();
+      modal.classList.remove('hidden');
+    });
+  }
 
   closeBtn.addEventListener('click', function () {
     modal.classList.add('hidden');
@@ -851,6 +951,19 @@ function initGoogleDriveModal(onAddFiles) {
     }
   });
 
+  // 저장된 키 삭제
+  if (clearBtn) {
+    clearBtn.addEventListener('click', function () {
+      localStorage.removeItem('gdrive_client_id');
+      localStorage.removeItem('gdrive_api_key');
+      gdriveAccessToken = null;
+      gdriveTokenExpiresAt = 0;
+      document.getElementById('gdrive-client-id').value = '';
+      document.getElementById('gdrive-api-key').value = '';
+      alert('저장된 구글 드라이브 Client ID와 API Key가 삭제되었습니다.');
+    });
+  }
+
   // 방법 1: 공유 링크로 사진 가져오기
   fetchBtn.addEventListener('click', async function () {
     const url = urlInput.value.trim();
@@ -860,7 +973,6 @@ function initGoogleDriveModal(onAddFiles) {
       return;
     }
 
-    // Google Drive File ID 파싱
     let fileId = null;
     const m1 = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
     const m2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
@@ -876,10 +988,8 @@ function initGoogleDriveModal(onAddFiles) {
     linkStatus.textContent = '구글 드라이브에서 사진을 다운로드하는 중...';
     linkStatus.className = 'status info';
 
-    // direct thumbnail / download URL
     const directUrl = 'https://lh3.googleusercontent.com/d/' + fileId;
     try {
-      // 이미지 로드 시도
       const img = new Image();
       img.crossOrigin = 'anonymous';
       img.onload = function () {
@@ -908,7 +1018,6 @@ function initGoogleDriveModal(onAddFiles) {
         }, 'image/jpeg', 0.95);
       };
       img.onerror = function () {
-        // Fallback: fetch API
         fetch('https://drive.google.com/uc?export=download&id=' + fileId)
           .then(function (res) {
             if (!res.ok) throw new Error('파일 다운로드 응답 실패');
@@ -939,69 +1048,21 @@ function initGoogleDriveModal(onAddFiles) {
     }
   });
 
-  // 방법 2: Google Picker API
+  // 방법 2: Google Picker 키 저장 후 즉시 실행!
   pickerBtn.addEventListener('click', function () {
     const clientId = document.getElementById('gdrive-client-id').value.trim();
     const apiKey = document.getElementById('gdrive-api-key').value.trim();
 
     if (!clientId || !apiKey) {
-      alert('Google Client ID와 API Key를 모두 입력해야 내 드라이브 파일 탐색기를 열 수 있습니다.\n간단한 공유 사진은 위의 "공유 링크로 가져오기"를 이용하세요.');
+      alert('Google Client ID와 API Key를 모두 입력해야 내 드라이브 파일 탐색기를 열 수 있습니다.');
       return;
     }
 
     localStorage.setItem('gdrive_client_id', clientId);
     localStorage.setItem('gdrive_api_key', apiKey);
+    modal.classList.add('hidden');
 
-    if (typeof google === 'undefined' || !google.accounts || !gapi) {
-      alert('Google API 클라이언트 라이브러리가 아직 로드되지 않았습니다. 인터넷 연결을 확인해 주세요.');
-      return;
-    }
-
-    gapi.load('picker', function () {
-      const tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope: 'https://www.googleapis.com/auth/drive.readonly',
-        callback: async function (response) {
-          if (response.error !== undefined) {
-            alert('Google 로그인 인증 실패: ' + response.error);
-            return;
-          }
-          const accessToken = response.access_token;
-          const view = new google.picker.DocsView(google.picker.ViewId.DOCS_IMAGES);
-          view.setMimeTypes('image/png,image/jpeg,image/webp');
-
-          const picker = new google.picker.PickerBuilder()
-            .addView(view)
-            .setOAuthToken(accessToken)
-            .setDeveloperKey(apiKey)
-            .setCallback(async function (data) {
-              if (data.action === google.picker.Action.PICKED) {
-                const files = [];
-                for (let i = 0; i < data.docs.length; i++) {
-                  const doc = data.docs[i];
-                  try {
-                    const res = await fetch(
-                      'https://www.googleapis.com/drive/v3/files/' + doc.id + '?alt=media',
-                      { headers: { Authorization: 'Bearer ' + accessToken } }
-                    );
-                    const blob = await res.blob();
-                    files.push(new File([blob], doc.name, { type: doc.mimeType }));
-                  } catch (e) {
-                    console.error('File download error:', e);
-                  }
-                }
-                if (files.length) {
-                  onAddFiles(files, true);
-                  modal.classList.add('hidden');
-                }
-              }
-            })
-            .build();
-          picker.setVisible(true);
-        }
-      });
-      tokenClient.requestAccessToken({ prompt: 'consent' });
-    });
+    openGooglePicker(clientId, apiKey, onAddFiles);
   });
 }
 
